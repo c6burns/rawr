@@ -1,0 +1,7 @@
+# cmake - common build dir names
+build/
+out/
+
+# vs and vscode
+.vs/
+.vscode/
