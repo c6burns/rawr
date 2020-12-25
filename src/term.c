@@ -102,6 +102,9 @@ void on_term_key_cb(enum mn_term_key key)
 	case MN_TERM_KEY_BREAK:
 		break;
 	case MN_TERM_KEY_ENTER:
+		mn_term_write(&term, "\n\n");
+		rawr_buf_clear(&rawr_term.buf);
+		rawr_term.prompt_len = rc_prompt();
 		break;
 	case MN_TERM_KEY_NONE:
 	case MN_TERM_KEY_INVALID:
