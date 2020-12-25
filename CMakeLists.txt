@@ -10,6 +10,10 @@ set(RAWR_LINK_LIBS)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
+if (NOT WIN32)
+	set(OPENSSL_ROOT_DIR /usr/local/opt/openssl)
+	find_package(OpenSSL REQUIRED)
+endif()
 
 #
 # dependencies
@@ -19,6 +23,13 @@ add_subdirectory(deps/aws-c-common)
 list(APPEND RAWR_LINK_LIBS aws-c-common)
 list(APPEND RAWR_INCLUDE_DIRS
 	deps/aws-c-common/include
+)
+
+# libuv
+add_subdirectory(deps/libuv)
+list(APPEND RAWR_LINK_LIBS libuv)
+list(APPEND RAWR_INCLUDE_DIRS
+	deps/libuv/include
 )
 
 # mn
@@ -124,8 +135,10 @@ set_target_properties(paex_record PROPERTIES FOLDER "examples/portaudio")
 set_target_properties(paex_record_file PROPERTIES FOLDER "examples/portaudio")
 set_target_properties(paex_saw PROPERTIES FOLDER "examples/portaudio")
 set_target_properties(paex_sine PROPERTIES FOLDER "examples/portaudio")
-set_target_properties(paex_wmme_ac3 PROPERTIES FOLDER "examples/portaudio")
-set_target_properties(paex_wmme_surround PROPERTIES FOLDER "examples/portaudio")
 set_target_properties(paex_write_sine PROPERTIES FOLDER "examples/portaudio")
 set_target_properties(paex_write_sine_nonint PROPERTIES FOLDER "examples/portaudio")
 set_target_properties(paex_sine_c++ PROPERTIES FOLDER "examples/portaudio")
+if (WIN32)
+	set_target_properties(paex_wmme_ac3 PROPERTIES FOLDER "examples/portaudio")
+	set_target_properties(paex_wmme_surround PROPERTIES FOLDER "examples/portaudio")
+endif()

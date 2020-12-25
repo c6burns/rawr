@@ -60,19 +60,24 @@ endif()
 
 
 add_library(strophe ${STROPHE_SRC} ${STROPHE_SRC_TLS} ${STROPHE_SRC_XML})
-target_link_libraries(strophe LibXml2)
+target_link_libraries(strophe LibXml2 ${OPENSSL_LIBRARIES})
 target_include_directories(strophe PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+	${CMAKE_CURRENT_SOURCE_DIR}/src
+	${OPENSSL_INCLUDE_DIR}
 )
+if (NOT WIN32)
+	target_link_libraries(strophe -lresolv)
+endif()
 
 macro(sq_add_executable name sources)
 	add_executable(${name} ${sources})
-	target_link_libraries(${name} strophe)
+	target_link_libraries(${name} strophe ${OPENSSL_LIBRARIES})
     target_include_directories(${name} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
+		${CMAKE_CURRENT_SOURCE_DIR}/src
+		${OPENSSL_INCLUDE_DIR}
+	)
 endmacro()
 
 sq_add_executable(active examples/active.c)
@@ -83,6 +88,6 @@ sq_add_executable(roster examples/roster.c)
 sq_add_executable(uuid examples/uuid.c)
 sq_add_executable(register examples/register.c)
 if (NOT WIN32)
-    sq_add_executable(vcard examples/vcard.c)
+	sq_add_executable(vcard examples/vcard.c)
 endif()
 

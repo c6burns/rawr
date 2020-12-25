@@ -12,12 +12,13 @@ set(STROPHE_XEP_SRC
 )
 
 add_library(strophe-xep ${STROPHE_XEP_SRC})
-target_link_libraries(strophe-xep strophe)
+target_link_libraries(strophe-xep ${OPENSSL_LIBRARIES} strophe)
 target_include_directories(strophe-xep PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/include
 	${CMAKE_CURRENT_SOURCE_DIR}/../libstrophe
 	${CMAKE_CURRENT_SOURCE_DIR}/../libstrophe/src
 	${CMAKE_CURRENT_SOURCE_DIR}/../mn/include
+	${OPENSSL_LIBRARIES}
 )
 
 add_executable(strophe-xep_example example/main.c)
