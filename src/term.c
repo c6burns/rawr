@@ -56,6 +56,11 @@ void on_term_key_cb(enum mn_term_key key)
 	case MN_TERM_KEY_F12:
 		break;
 	case MN_TERM_KEY_HOME:
+		pos = rawr_buf_cursor_get(&rawr_term.buf);
+		if (pos) {
+			rawr_buf_cursor_set(&rawr_term.buf, 0);
+			mn_term_pos_set(&term, rawr_term.prompt_len + 1, rawr_term.h);
+		}
 		break;
 	case MN_TERM_KEY_END:
 		break;
