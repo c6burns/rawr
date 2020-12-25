@@ -3,6 +3,8 @@
 #include "aws/common/mutex.h"
 #include "mn/error.h"
 
+MN_STATIC_ASSERT(sizeof(struct aws_mutex) == sizeof(mn_mutex_t));
+
 // --------------------------------------------------------------------------------------------------------------
 int mn_mutex_setup(mn_mutex_t *mtx)
 {
