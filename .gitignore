@@ -5,3 +5,6 @@ out/
 # vs and vscode
 .vs/
 .vscode/
+
+# OSX
+.DS_Store
