@@ -63,6 +63,10 @@ void on_term_key_cb(enum mn_term_key key)
 		}
 		break;
 	case MN_TERM_KEY_END:
+		pos = rawr_buf_cursor_get(&rawr_term.buf);
+		while (rawr_buf_cursor_set(&rawr_term.buf, ++pos) == MN_SUCCESS) {
+			mn_term_pos_right(&term, 1);
+		}
 		break;
 	case MN_TERM_KEY_INSERT:
 		break;
