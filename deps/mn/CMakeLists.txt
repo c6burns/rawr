@@ -28,6 +28,7 @@ set(MN_SRC
     include/mn/buffer.h
     include/mn/buffer_pool.h
     include/mn/dso.h
+    include/mn/error.h
     include/mn/endpoint.h
     include/mn/list_ptr.h
     include/mn/log.h
