@@ -1,6 +1,8 @@
 #include "mn/atomic.h"
-
+#include "mn/error.h"
 #include "aws/common/atomics.h"
+
+MN_STATIC_ASSERT(sizeof(mn_atomic_t) == sizeof(struct aws_atomic_var));
 
 // --------------------------------------------------------------------------------------------------------------
 uint64_t mn_atomic_load(const volatile mn_atomic_t *a)
