@@ -26,34 +26,56 @@ void on_term_char_cb(char c)
 	mn_term_pos_restore(&term);
 }
 
+void rawr_announce_key(const char* msg)
+{
+	mn_term_pos_store(&term);
+	mn_term_pos_set(&term, 1, rawr_term.h - 1);
+	mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_BRIGHT));
+	mn_term_write(&term, "%s pressed", msg);
+	mn_term_clear_line_end(&term);
+	mn_term_pos_restore(&term);
+}
+
 void on_term_key_cb(enum mn_term_key key)
 {
 	uint16_t pos;
 
 	switch (key) {
 	case MN_TERM_KEY_F1:
+		rawr_announce_key("F1");
 		break;
 	case MN_TERM_KEY_F2:
+		rawr_announce_key("F2");
 		break;
 	case MN_TERM_KEY_F3:
+		rawr_announce_key("F3");
 		break;
 	case MN_TERM_KEY_F4:
+		rawr_announce_key("F4");
 		break;
 	case MN_TERM_KEY_F5:
+		rawr_announce_key("F5");
 		break;
 	case MN_TERM_KEY_F6:
+		rawr_announce_key("F6");
 		break;
 	case MN_TERM_KEY_F7:
+		rawr_announce_key("F7");
 		break;
 	case MN_TERM_KEY_F8:
+		rawr_announce_key("F8");
 		break;
 	case MN_TERM_KEY_F9:
+		rawr_announce_key("F9");
 		break;
 	case MN_TERM_KEY_F10:
+		rawr_announce_key("F10");
 		break;
 	case MN_TERM_KEY_F11:
+		rawr_announce_key("F11");
 		break;
 	case MN_TERM_KEY_F12:
+		rawr_announce_key("F12");
 		break;
 	case MN_TERM_KEY_HOME:
 		pos = rawr_buf_cursor_get(&rawr_term.buf);
@@ -69,6 +91,7 @@ void on_term_key_cb(enum mn_term_key key)
 		}
 		break;
 	case MN_TERM_KEY_INSERT:
+		rawr_announce_key("INS");
 		break;
 	case MN_TERM_KEY_DELETE:
 		rawr_buf_delete(&rawr_term.buf);
@@ -88,8 +111,10 @@ void on_term_key_cb(enum mn_term_key key)
 		}
 		break;
 	case MN_TERM_KEY_UP:
+		rawr_announce_key("UP");
 		break;
 	case MN_TERM_KEY_DOWN:
+		rawr_announce_key("DOWN");
 		break;
 	case MN_TERM_KEY_RIGHT:
 		pos = rawr_buf_cursor_get(&rawr_term.buf);
@@ -105,8 +130,10 @@ void on_term_key_cb(enum mn_term_key key)
 		}
 		break;
 	case MN_TERM_KEY_TAB:
+		rawr_announce_key("TAB");
 		break;
 	case MN_TERM_KEY_ESC:
+		rawr_announce_key("ESC");
 		break;
 	case MN_TERM_KEY_BREAK:
 		break;
@@ -151,7 +178,6 @@ uint32_t rawr_prompt()
 			break;
 		case 29:
 		case 2:
-		case 1:
 			mn_term_clear_line_end(&term);
 			break;
 		case 4:
@@ -167,6 +193,8 @@ uint32_t rawr_prompt()
 			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_BRIGHT));
 			mn_term_write(&term, "> ");
 			mn_term_clear_line_end(&term);
+			break;
+		case 1:
 			break;
 		case 0:
 			mn_term_pos_set(&term, 1, rawr_term.h);
@@ -189,6 +217,7 @@ uint32_t rawr_prompt()
 		}
 	}
 
+	mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_BRIGHT));
 	mn_term_pos_get(&term);
 	mn_term_write(&term, "%s", rawr_term.buf.bb.buffer);
 
