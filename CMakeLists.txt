@@ -62,8 +62,10 @@ add_subdirectory(deps/libstrophe-xep)
 
 add_executable(rawr_term
 	include/rawr/buf.h
+	include/rawr/pa.h
 	include/rawr/term.h
 	src/buf.c
+	src/pa.c
 	src/term.c
 )
 target_link_libraries(rawr_term
