@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(rawr)
+project(rawr LANGUAGES CXX)
 enable_testing()
 
 #
@@ -54,27 +54,61 @@ set(PA_BUILD_TESTS ON CACHE INTERNAL "")
 set(PA_BUILD_EXAMPLES ON CACHE INTERNAL "")
 add_subdirectory(deps/portaudio)
 
+# libsrtp
+add_subdirectory(deps/libsrtp)
+
 # libstrophe-xep
 add_subdirectory(deps/libstrophe-xep)
 
 #
-# executable
+# library
 
-add_executable(rawr_term
+macro(rawr_add_library rname)
+    add_library(${rname} ${ARGN})
+    target_link_libraries(${rname}
+	    mn
+        portaudio
+    )
+    target_include_directories(${rname} PRIVATE
+	    include
+	    deps/mn/include
+        deps/portaudio/include
+    )
+endmacro()
+
+rawr_add_library(rawr
+	include/rawr/app.h
 	include/rawr/buf.h
 	include/rawr/pa.h
 	include/rawr/term.h
+	src/app.c
 	src/buf.c
 	src/pa.c
 	src/term.c
 )
-target_link_libraries(rawr_term
-	mn
-)
-target_include_directories(rawr_term PRIVATE
-	include
-	deps/mn/include
-)
+
+#
+# executable
+
+macro(rawr_add_executable rname)
+    add_executable(${rname} ${ARGN})
+    target_link_libraries(${rname}
+        rawr
+    )
+    target_include_directories(${rname} PRIVATE
+	    include
+	    deps/mn/include
+        deps/portaudio/include
+    )
+    add_custom_command(TARGET ${rname} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:portaudio> $<TARGET_FILE_DIR:${rname}>
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:uv> $<TARGET_FILE_DIR:${rname}>
+    )
+endmacro()
+
+rawr_add_executable(playground_ui src/playground_ui.c)
+
+rawr_add_executable(playground_pa src/playground_pa.c)
 
 #
 # cmake target

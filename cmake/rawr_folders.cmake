@@ -44,6 +44,11 @@ set_target_properties(test_opus_decode PROPERTIES FOLDER "tests/opus")
 set_target_properties(test_opus_encode PROPERTIES FOLDER "tests/opus")
 set_target_properties(test_opus_padding PROPERTIES FOLDER "tests/opus")
 
+# libsrtp
+set_target_properties(srtp2 PROPERTIES FOLDER "deps")
+set_target_properties(srtp_driver PROPERTIES FOLDER "examples/libsrtp")
+set_target_properties(test_srtp PROPERTIES FOLDER "tests/libsrtp")
+
 # strophe
 set_target_properties(strophe PROPERTIES FOLDER "deps")
 set_target_properties(strophe-xep PROPERTIES FOLDER "deps")

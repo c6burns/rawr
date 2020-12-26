@@ -37,7 +37,7 @@ uint16_t rawr_buf_capacity(rawr_buf_t *buf)
 char *rawr_buf_slice(rawr_buf_t *buf, uint16_t offset)
 {
 	MN_ASSERT(buf && aws_byte_buf_is_valid(&buf->bb));
-	MN_GUARD(offset > buf->bb.len);
+    if (offset > buf->bb.len) return NULL;
 	return (buf->bb.buffer + offset);
 }
 

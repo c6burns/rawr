@@ -42,7 +42,7 @@ set(MN_SRC
     include/mn/uuid.h
 )
 add_library(mn ${MN_SRC})
-target_link_libraries(mn aws-c-common uv_a)
+target_link_libraries(mn aws-c-common uv)
 target_include_directories(mn PRIVATE
     include
     ../aws-c-common/include
