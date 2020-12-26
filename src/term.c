@@ -15,7 +15,7 @@ typedef struct rawr_term_s {
 mn_term_t term = MN_TERM_INIT;
 rawr_term_t rawr_term = { 0 };
 
-uint32_t rc_prompt();
+uint32_t rawr_prompt();
 
 void on_term_char_cb(char c)
 {
@@ -111,9 +111,11 @@ void on_term_key_cb(enum mn_term_key key)
 	case MN_TERM_KEY_BREAK:
 		break;
 	case MN_TERM_KEY_ENTER:
-		mn_term_write(&term, "\n\n");
+		// TODO: send command somewhere :D
 		rawr_buf_clear(&rawr_term.buf);
-		rawr_term.prompt_len = rc_prompt();
+		mn_term_pos_set(&term, 1 + rawr_term.prompt_len, rawr_term.h);
+		mn_term_clear_line_end(&term);
+		rawr_term.prompt_len = rawr_prompt();
 		break;
 	case MN_TERM_KEY_NONE:
 	case MN_TERM_KEY_INVALID:
@@ -124,21 +126,68 @@ void on_term_key_cb(enum mn_term_key key)
 	mn_term_flush(&term);
 }
 
-uint32_t rc_prompt()
+uint32_t rawr_prompt()
 {
 	uint32_t len = 0;
 
-	mn_term_pos_set(&term, 1, rawr_term.h);
+	for (int i = 30; i >= 0; i--) {
+		if ((rawr_term.h - i) <= 0) continue;
+		if (rawr_term.w <= 50 && i > 0) continue;
 
-	//mn_term_clear_line(&term);
+		mn_term_pos_set(&term, 1, rawr_term.h - i);
+		switch (i) {
+		case 28:
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_BRIGHT));
+			mn_term_write(&term, "[ ");
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_DARK));
+			mn_term_write(&term, "---------------");
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_PURPLE_BRIGHT));
+			mn_term_write(&term, " RAWR! Softphone ");
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_DARK));
+			mn_term_write(&term, "---------------");
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_BRIGHT));
+			mn_term_write(&term, " ]");
+			mn_term_clear_line_end(&term);
+			break;
+		case 29:
+		case 2:
+		case 1:
+			mn_term_clear_line_end(&term);
+			break;
+		case 4:
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_PURPLE_BRIGHT));
+			mn_term_write(&term, "microphone");
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_BRIGHT));
+			mn_term_write(&term, "> ");
+			mn_term_clear_line_end(&term);
+			break;
+		case 3:
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_PURPLE_BRIGHT));
+			mn_term_write(&term, "speaker   ");
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_BRIGHT));
+			mn_term_write(&term, "> ");
+			mn_term_clear_line_end(&term);
+			break;
+		case 0:
+			mn_term_pos_set(&term, 1, rawr_term.h);
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREEN_BRIGHT));
+			if (rawr_term.w < 50 || rawr_term.h < 30) {
+				mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_RED_BRIGHT));
+			}
+			mn_term_write(&term, "rawr");
+			len += 4;
 
-	mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREEN_BRIGHT));
-	mn_term_write(&term, "rc");
-	len += 2;
-
-	mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_BRIGHT));
-	mn_term_write(&term, "> ");
-	len += 2;
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_BRIGHT));
+			mn_term_write(&term, "> ");
+			len += 2;
+			break;
+		default:
+			mn_term_color_set(&term, mn_term_color16(&term, MN_TERM_COLOR_GREY_DARK));
+			mn_term_write(&term, "> ");
+			mn_term_clear_line_end(&term);
+			break;
+		}
+	}
 
 	mn_term_pos_get(&term);
 	mn_term_write(&term, "%s", rawr_term.buf.bb.buffer);
@@ -152,26 +201,23 @@ void on_term_resize_cb(uint16_t x, uint16_t y)
 {
 	rawr_term.w = x;
 	rawr_term.h = y;
-	rawr_term.prompt_len = rc_prompt();
-	//mn_term_write(&term, "\nCommand: %s\n\n", cmd);
-	//rc_prompt();
+	rawr_term.prompt_len = rawr_prompt();
 }
 
 int main(int argc, char** argv)
 {
 	mn_term_state_t term_state;
 
-	rawr_buf_setup(&rawr_term.buf, MN_TERM_MAX_LINE);
+	MN_GUARD(rawr_buf_setup(&rawr_term.buf, MN_TERM_MAX_LINE));
 
-	mn_term_setup(&term);
+	MN_GUARD(mn_term_setup(&term));
+
 	mn_term_callback_char(&term, on_term_char_cb);
 	mn_term_callback_key(&term, on_term_key_cb);
 	mn_term_callback_resize(&term, on_term_resize_cb);
-	//mn_term_debug_print(&term, true);
+
 	MN_GUARD(mn_term_start(&term));
-	//mn_term_write(&term, "I love potatoes :D :D :D\n\n");
-	//rc_prompt();
-	//mn_term_flush(&term);
+
 	while (1) {
 		term_state = mn_term_state(&term);
 		if (term_state == MN_TERM_STATE_STOPPING || term_state == MN_TERM_STATE_STOPPED || term_state == MN_TERM_STATE_ERROR) break;
