@@ -1,12 +1,20 @@
 cmake_minimum_required(VERSION 3.15)
-project(rawr LANGUAGES CXX)
+project(rawr LANGUAGES C)
 enable_testing()
 
 #
 # setup
 
-set(RAWR_INCLUDE_DIRS)
+set(RAWR_INCLUDE_DIRS include)
 set(RAWR_LINK_LIBS)
+
+set(RAWR_PORTAUDIO ON CACHE BOOL "Builds and links portaudio as a dependency")
+set(RAWR_LIBSRTP ON CACHE BOOL "Builds and links libsrtp as a dependency")
+set(RAWR_AWSCOMMON ON CACHE BOOL "Builds and links aws-c-common as a dependency")
+set(RAWR_LIBUV ON CACHE BOOL "Builds and links libuv as a dependency")
+set(RAWR_MN ON CACHE BOOL "Builds and links libmn as a dependency")
+set(RAWR_OPUS ON CACHE BOOL "Builds and links opus as a dependency")
+set(RAWR_STROPHE ON CACHE BOOL "Builds and links libstrophe as a dependency")
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
@@ -19,46 +27,68 @@ endif()
 # dependencies
 
 # aws-c-common
-add_subdirectory(deps/aws-c-common)
-list(APPEND RAWR_LINK_LIBS aws-c-common)
-list(APPEND RAWR_INCLUDE_DIRS
-	deps/aws-c-common/include
-)
+if (RAWR_AWSCOMMON)
+	add_subdirectory(deps/aws-c-common)
+	list(APPEND RAWR_LINK_LIBS aws-c-common)
+	list(APPEND RAWR_INCLUDE_DIRS
+		deps/aws-c-common/include
+	)
+endif()
 
 # libuv
-add_subdirectory(deps/libuv)
-list(APPEND RAWR_LINK_LIBS libuv)
-list(APPEND RAWR_INCLUDE_DIRS
-	deps/libuv/include
-)
+if (RAWR_LIBUV)
+	add_subdirectory(deps/libuv)
+	list(APPEND RAWR_LINK_LIBS libuv)
+	list(APPEND RAWR_INCLUDE_DIRS
+		deps/libuv/include
+	)
+endif()
 
 # mn
-add_subdirectory(deps/mn)
-list(APPEND RAWR_LINK_LIBS mn)
-list(APPEND RAWR_INCLUDE_DIRS
-	deps/mn/include
-)
+if (RAWR_MN)
+	add_subdirectory(deps/mn)
+	list(APPEND RAWR_LINK_LIBS mn)
+	list(APPEND RAWR_INCLUDE_DIRS
+		deps/mn/include
+	)
+endif()
 
 # opus
-add_subdirectory(deps/opus)
-list(APPEND RAWR_LINK_LIBS opus)
-list(APPEND RAWR_INCLUDE_DIRS
-	deps/opus/include
-)
+if (RAWR_OPUS)
+	add_subdirectory(deps/opus)
+	list(APPEND RAWR_LINK_LIBS opus)
+	list(APPEND RAWR_INCLUDE_DIRS
+		deps/opus/include
+	)
+endif()
 
 # portaudio
-set(PA_BUILD_SHARED ON CACHE INTERNAL "")
-set(PA_BUILD_STATIC ON CACHE INTERNAL "")
-set(PA_DISABLE_INSTALL ON CACHE INTERNAL "")
-set(PA_BUILD_TESTS ON CACHE INTERNAL "")
-set(PA_BUILD_EXAMPLES ON CACHE INTERNAL "")
-add_subdirectory(deps/portaudio)
+if (RAWR_PORTAUDIO)
+	set(PA_BUILD_SHARED ON CACHE INTERNAL "")
+	set(PA_BUILD_STATIC ON CACHE INTERNAL "")
+	set(PA_DISABLE_INSTALL ON CACHE INTERNAL "")
+	set(PA_BUILD_TESTS ON CACHE INTERNAL "")
+	set(PA_BUILD_EXAMPLES ON CACHE INTERNAL "")
+	add_subdirectory(deps/portaudio)
+	list(APPEND RAWR_LINK_LIBS portaudio)
+	list(APPEND RAWR_INCLUDE_DIRS 
+		deps/opus/include
+	)
+endif()
 
 # libsrtp
-add_subdirectory(deps/libsrtp)
+if (RAWR_LIBSRTP)
+	add_subdirectory(deps/libsrtp)
+	list(APPEND RAWR_LINK_LIBS srtp2)
+	list(APPEND RAWR_INCLUDE_DIRS 
+		deps/libsrtp/include
+	)
+endif()
 
 # libstrophe-xep
-add_subdirectory(deps/libstrophe-xep)
+if (RAWR_STROPHE)
+	add_subdirectory(deps/libstrophe-xep)
+endif()
 
 #
 # library
@@ -66,13 +96,10 @@ add_subdirectory(deps/libstrophe-xep)
 macro(rawr_add_library rname)
     add_library(${rname} ${ARGN})
     target_link_libraries(${rname}
-	    mn
-        portaudio
+	    ${RAWR_LINK_LIBS}
     )
     target_include_directories(${rname} PRIVATE
-	    include
-	    deps/mn/include
-        deps/portaudio/include
+		${RAWR_INCLUDE_DIRS}
     )
 endmacro()
 
@@ -93,21 +120,29 @@ rawr_add_library(rawr
 macro(rawr_add_executable rname)
     add_executable(${rname} ${ARGN})
     target_link_libraries(${rname}
-        rawr
+        ${RAWR_LINK_LIBS}
     )
     target_include_directories(${rname} PRIVATE
-	    include
-	    deps/mn/include
-        deps/portaudio/include
-    )
-    add_custom_command(TARGET ${rname} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:portaudio> $<TARGET_FILE_DIR:${rname}>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:uv> $<TARGET_FILE_DIR:${rname}>
-    )
+	    ${RAWR_INCLUDE_DIRS}
+	)
+	
+	if (TARGET portaudio)
+		add_custom_command(TARGET ${rname} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:portaudio> $<TARGET_FILE_DIR:${rname}>
+		)
+	endif()
+	
+	if (TARGET uv)
+		add_custom_command(TARGET ${rname} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:uv> $<TARGET_FILE_DIR:${rname}>
+		)
+	endif()
 endmacro()
 
+# user interface
 rawr_add_executable(playground_ui src/playground_ui.c)
 
+# portaudio
 rawr_add_executable(playground_pa src/playground_pa.c)
 
 #

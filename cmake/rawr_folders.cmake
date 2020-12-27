@@ -3,15 +3,20 @@
 # folder organization
 
 # aws-c-common
+if (TARGET aws-c-common)
 set_target_properties(aws-c-common PROPERTIES FOLDER "deps")
 set_target_properties(aws-c-common-assert-tests PROPERTIES FOLDER "deps")
 set_target_properties(aws-c-common-tests PROPERTIES FOLDER "deps")
+endif()
 
 # mn
+if (TARGET mn)
 set_target_properties(mn PROPERTIES FOLDER "deps")
 set_target_properties(mn-tests PROPERTIES FOLDER "tests/mn")
+endif()
 
 # libxml2
+if (TARGET LibXml2)
 set_target_properties(LibXml2 PROPERTIES FOLDER "deps")
 set_target_properties(runsuite PROPERTIES FOLDER "tests/LibXml2")
 set_target_properties(runtest PROPERTIES FOLDER "tests/LibXml2")
@@ -36,20 +41,26 @@ set_target_properties(testXPath PROPERTIES FOLDER "tests/LibXml2")
 set_target_properties(LibXml2Mod PROPERTIES FOLDER "extras/LibXml2")
 set_target_properties(xmlcatalog PROPERTIES FOLDER "examples/LibXml2")
 set_target_properties(xmllint PROPERTIES FOLDER "examples/LibXml2")
+endif()
 
 # opus
+if (TARGET opus)
 set_target_properties(opus PROPERTIES FOLDER "deps")
 set_target_properties(test_opus_api PROPERTIES FOLDER "tests/opus")
 set_target_properties(test_opus_decode PROPERTIES FOLDER "tests/opus")
 set_target_properties(test_opus_encode PROPERTIES FOLDER "tests/opus")
 set_target_properties(test_opus_padding PROPERTIES FOLDER "tests/opus")
+endif()
 
 # libsrtp
+if (TARGET srtp)
 set_target_properties(srtp2 PROPERTIES FOLDER "deps")
 set_target_properties(srtp_driver PROPERTIES FOLDER "examples/libsrtp")
 set_target_properties(test_srtp PROPERTIES FOLDER "tests/libsrtp")
+endif()
 
 # strophe
+if (TARGET strophe)
 set_target_properties(strophe PROPERTIES FOLDER "deps")
 set_target_properties(strophe-xep PROPERTIES FOLDER "deps")
 set_target_properties(active PROPERTIES FOLDER "examples/strophe")
@@ -59,8 +70,10 @@ set_target_properties(component PROPERTIES FOLDER "examples/strophe")
 set_target_properties(register PROPERTIES FOLDER "examples/strophe")
 set_target_properties(roster PROPERTIES FOLDER "examples/strophe")
 set_target_properties(uuid PROPERTIES FOLDER "examples/strophe")
+endif()
 
 # portaudio
+if (TARGET portaudio)
 set_target_properties(portaudio PROPERTIES FOLDER "deps")
 set_target_properties(portaudio_static PROPERTIES FOLDER "extras/portaudio")
 set_target_properties(patest_longsine PROPERTIES FOLDER "tests/portaudio")
@@ -75,12 +88,15 @@ set_target_properties(paex_saw PROPERTIES FOLDER "examples/portaudio")
 set_target_properties(paex_sine PROPERTIES FOLDER "examples/portaudio")
 set_target_properties(paex_write_sine PROPERTIES FOLDER "examples/portaudio")
 set_target_properties(paex_write_sine_nonint PROPERTIES FOLDER "examples/portaudio")
-set_target_properties(paex_sine_c++ PROPERTIES FOLDER "examples/portaudio")
+#set_target_properties(paex_sine_c++ PROPERTIES FOLDER "examples/portaudio")
 if (WIN32)
 	set_target_properties(paex_wmme_ac3 PROPERTIES FOLDER "examples/portaudio")
 	set_target_properties(paex_wmme_surround PROPERTIES FOLDER "examples/portaudio")
 endif()
+endif()
 
 # libuv
+if (TARGET uv)
 set_target_properties(uv_a PROPERTIES FOLDER "deps")
 set_target_properties(uv PROPERTIES FOLDER "extras/libuv")
+endif()
