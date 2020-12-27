@@ -38,7 +38,7 @@ endif()
 # libuv
 if (RAWR_LIBUV)
 	add_subdirectory(deps/libuv)
-	list(APPEND RAWR_LINK_LIBS libuv)
+	list(APPEND RAWR_LINK_LIBS uv)
 	list(APPEND RAWR_INCLUDE_DIRS
 		deps/libuv/include
 	)
@@ -119,7 +119,8 @@ rawr_add_library(rawr
 
 macro(rawr_add_executable rname)
     add_executable(${rname} ${ARGN})
-    target_link_libraries(${rname}
+	target_link_libraries(${rname}
+		rawr
         ${RAWR_LINK_LIBS}
     )
     target_include_directories(${rname} PRIVATE

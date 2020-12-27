@@ -1,10 +1,6 @@
 #ifndef RAWR_TERM_H
 #define RAWR_TERM_H
 
-typedef void (*rawr_term_callback_option)(uint8_t);
-typedef void (*rawr_term_callback_cancel)();
-typedef void (*rawr_term_callback_submit)(char *submitted);
-
 int rawr_term_setup(void);
 void rawr_term_cleanup(void);
 int rawr_term_running(void);
