@@ -50,12 +50,6 @@ if (RAWR_MBEDTLS)
     list(APPEND RAWR_MBEDTLS_LIBRARIES ${RAWR_EXT_DIR}/${RAWR_EXT_CRYPTO})
     list(APPEND RAWR_MBEDTLS_LIBRARIES ${RAWR_EXT_DIR}/${RAWR_EXT_TLS})
     list(APPEND RAWR_MBEDTLS_LIBRARIES ${RAWR_EXT_DIR}/${RAWR_EXT_X509})
-
-    list(APPEND RAWR_INCLUDE_DIRS ${RAWR_MBEDTLS_INCLUDE_DIRS})
-    list(APPEND RAWR_LINK_LIBS ${RAWR_MBEDTLS_LIBRARIES})
-
-    message(${RAWR_MBEDTLS_LIBRARIES})
-    message(${RAWR_MBEDTLS_INCLUDE_DIRS})
 endif()
 
 # libwebsockets
@@ -90,10 +84,15 @@ if (RAWR_LWS)
             -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
         TEST_COMMAND ""
     )
-    list(APPEND RAWR_INCLUDE_DIRS ${CMAKE_CURRENT_BINARY_DIR}/deps/install/include)
+    set(RAWR_LWS_INCLUDE_DIRS ${CMAKE_CURRENT_BINARY_DIR}/deps/install/include)
+    list(APPEND RAWR_INCLUDE_DIRS ${RAWR_LWS_INCLUDE_DIRS})
     set(RAWR_EXT_DIR ${CMAKE_CURRENT_BINARY_DIR}/deps/install/lib)
-    set(RAWR_EXT_FILE ${CMAKE_STATIC_LIBRARY_PREFIX}websockets${CMAKE_STATIC_LIBRARY_SUFFIX})
-    list(APPEND RAWR_LINK_LIBS ${RAWR_EXT_DIR}/${RAWR_EXT_FILE})
+    set(RAWR_EXT_LIBNAME websockets)
+    if (WIN32)
+        set(RAWR_EXT_LIBNAME websockets_static)
+    endif()
+    set(RAWR_EXT_LIBFILE ${CMAKE_STATIC_LIBRARY_PREFIX}${RAWR_EXT_LIBNAME}${CMAKE_STATIC_LIBRARY_SUFFIX})
+    list(APPEND RAWR_LWS_LIBRARIES ${RAWR_EXT_DIR}/${RAWR_EXT_LIBFILE})
 endif()
 
 # aws-c-common
@@ -243,6 +242,7 @@ endif()
 if (TARGET libwebsockets)
 	rawr_add_executable(playground_lws src/playground/lws/playground_lws.c)
 	add_dependencies(playground_lws libwebsockets)
+    target_link_libraries(playground_lws ${RAWR_LWS_LIBRARIES} ${RAWR_MBEDTLS_LIBRARIES})
 endif()
 
 #
