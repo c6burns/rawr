@@ -348,10 +348,10 @@ int main(void)
 
 
     dec = opus_decoder_create(sampling_rate, num_channels, &err);
-    if (err != OPUS_OK || dec == NULL) return;
+    if (err != OPUS_OK || dec == NULL) return -1;
 
     enc = opus_encoder_create(sampling_rate, num_channels, application, &err);
-    if (err != OPUS_OK || enc == NULL) return;
+    if (err != OPUS_OK || enc == NULL) return -1;
 
     if (opus_encoder_ctl(enc, OPUS_SET_BITRATE(bitrate)) != OPUS_OK) goto cleanup;
     if (opus_encoder_ctl(enc, OPUS_SET_FORCE_CHANNELS(force_channel)) != OPUS_OK) goto cleanup;
