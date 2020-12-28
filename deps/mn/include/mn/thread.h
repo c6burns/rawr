@@ -44,6 +44,8 @@ typedef struct mn_thread_s {
 void mn_thread_sleep(uint64_t ns);
 #define mn_thread_sleep_s(tstamp) mn_thread_sleep(mn_tstamp_convert(tstamp, MN_TSTAMP_S, MN_TSTAMP_NS))
 #define mn_thread_sleep_ms(tstamp) mn_thread_sleep(mn_tstamp_convert(tstamp, MN_TSTAMP_MS, MN_TSTAMP_NS))
+#define mn_thread_sleep_us(tstamp) mn_thread_sleep(mn_tstamp_convert(tstamp, MN_TSTAMP_US, MN_TSTAMP_NS))
+#define mn_thread_sleep_ns(tstamp) mn_thread_sleep(tstamp)
 
 uint64_t mn_thread_id(void);
 int mn_thread_setup(mn_thread_t *thread);
