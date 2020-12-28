@@ -313,6 +313,7 @@ int main(void)
     numChannels = inputInfo->maxInputChannels < outputInfo->maxOutputChannels
                       ? inputInfo->maxInputChannels
                       : outputInfo->maxOutputChannels;
+    numChannels = 1;
     mn_log_trace("Num channels = %d.", numChannels);
 
     inputParameters.channelCount = numChannels;
