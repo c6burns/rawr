@@ -90,9 +90,9 @@ if (RAWR_LWS)
             -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
         TEST_COMMAND ""
     )
-    list(APPEND RAWR_INCLUDE_DIRS ${CMAKE_CURRENT_BINARY_DIR}/deps/src/libwebsockets-build/include)
-    set(RAWR_EXT_DIR ${CMAKE_CURRENT_BINARY_DIR}/deps/src/libwebsockets-build/lib/$<CONFIG>)
-    set(RAWR_EXT_FILE ${CMAKE_STATIC_LIBRARY_PREFIX}websockets_static${CMAKE_STATIC_LIBRARY_SUFFIX})
+    list(APPEND RAWR_INCLUDE_DIRS ${CMAKE_CURRENT_BINARY_DIR}/deps/install/include)
+    set(RAWR_EXT_DIR ${CMAKE_CURRENT_BINARY_DIR}/deps/install/lib)
+    set(RAWR_EXT_FILE ${CMAKE_STATIC_LIBRARY_PREFIX}websockets${CMAKE_STATIC_LIBRARY_SUFFIX})
     list(APPEND RAWR_LINK_LIBS ${RAWR_EXT_DIR}/${RAWR_EXT_FILE})
 endif()
 
@@ -214,21 +214,24 @@ if (TARGET portaudio AND TARGET opus AND TARGET srtp2)
         src/playground/srtp/playground_srtp_sendrecv.c
     )
     target_include_directories(playground_srtp_sendrecv PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
-    target_compile_definitions(playground_srtp_sendrecv PRIVATE HAVE_WINSOCK2_H)
 
     rawr_add_executable(playground_srtp_send
         ${RAWR_SRTP_SRC_COMMON}
         src/playground/srtp/playground_srtp_send.c
     )
     target_include_directories(playground_srtp_send PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
-    target_compile_definitions(playground_srtp_send PRIVATE HAVE_WINSOCK2_H)
 
     rawr_add_executable(playground_srtp_recv
         ${RAWR_SRTP_SRC_COMMON}
         src/playground/srtp/playground_srtp_recv.c
     )
     target_include_directories(playground_srtp_recv PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
-    target_compile_definitions(playground_srtp_recv PRIVATE HAVE_WINSOCK2_H)
+	
+	if (WIN32)
+		target_compile_definitions(playground_srtp_sendrecv PRIVATE HAVE_WINSOCK2_H)
+		target_compile_definitions(playground_srtp_send PRIVATE HAVE_WINSOCK2_H)
+		target_compile_definitions(playground_srtp_recv PRIVATE HAVE_WINSOCK2_H)
+	endif()
 endif()
 
 # playground: strophe
@@ -238,7 +241,8 @@ endif()
 
 # playground: libwebsockets
 if (TARGET libwebsockets)
-    rawr_add_executable(playground_lws src/playground/lws/playground_lws.c)
+	rawr_add_executable(playground_lws src/playground/lws/playground_lws.c)
+	add_dependencies(playground_lws libwebsockets)
 endif()
 
 #

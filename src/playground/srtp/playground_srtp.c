@@ -362,11 +362,11 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t port)
 /* set address */
 #ifdef HAVE_INET_ATON
     if (0 == inet_aton(address, &rcvr_addr)) {
-        mn_log_error("%s: cannot parse IP v4 address %s", argv[0], address);
+        mn_log_error("cannot parse IP v4 address %s", address);
         exit(1);
     }
     if (rcvr_addr.s_addr == INADDR_NONE) {
-        mn_log_error("%s: address error", argv[0]);
+        mn_log_error("address error");
         exit(1);
     }
 #else

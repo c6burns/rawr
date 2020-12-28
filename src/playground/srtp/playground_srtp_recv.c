@@ -40,7 +40,7 @@ int main(void)
     mn_log_setup();
 
     err = Pa_Initialize();
-    if (err != paNoError) return;
+    if (err != paNoError) return -1;
 
 #ifdef RTPW_USE_WINSOCK2
     WORD wVersionRequested = MAKEWORD(2, 0);
