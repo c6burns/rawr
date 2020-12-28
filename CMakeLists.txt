@@ -82,6 +82,7 @@ if (RAWR_LIBSRTP)
 	list(APPEND RAWR_LINK_LIBS srtp2)
 	list(APPEND RAWR_INCLUDE_DIRS 
 		deps/libsrtp/include
+		deps/libsrtp/test
 	)
 endif()
 
@@ -140,11 +141,39 @@ macro(rawr_add_executable rname)
 	endif()
 endmacro()
 
-# user interface
-rawr_add_executable(playground_ui src/playground_ui.c)
+# playground: user interface
+if (TARGET mn)
+    rawr_add_executable(playground_ui src/playground/ui/playground_ui.c)
+endif()
 
-# portaudio
-rawr_add_executable(playground_pa src/playground_pa.c)
+# playground: portaudio + opus
+if (TARGET portaudio AND TARGET opus)
+    rawr_add_executable(playground_pa src/playground/pa/playground_pa.c)
+endif()
+
+# playground: srtp
+if (TARGET srtp2)
+    rawr_add_executable(playground_srtp_send
+        src/playground/srtp/rtp.c
+        src/playground/srtp/util.c
+        src/playground/srtp/playground_srtp.c
+        src/playground/srtp/playground_srtp_send.c
+    )
+    target_include_directories(playground_srtp_send PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
+
+    rawr_add_executable(playground_srtp_recv
+        src/playground/srtp/rtp.c
+        src/playground/srtp/util.c
+        src/playground/srtp/playground_srtp.c
+        src/playground/srtp/playground_srtp_recv.c
+    )
+    target_include_directories(playground_srtp_recv PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
+endif()
+
+# playground: strophe
+if (TARGET strophe)
+    rawr_add_executable(playground_strophe src/playground/strophe/playground_strophe.c)
+endif()
 
 #
 # cmake target
