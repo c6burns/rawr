@@ -88,7 +88,7 @@ void produce_spsc_thread_run(void *priv)
 MN_TEST_CASE_BEGIN(mn_queue_spsc_stress)
 	mn_queue_spsc_t queue;
 	mn_thread_t consume_thread, produce_thread;
-	static uint64_t tstamp_start, tstamp_end;
+	//static uint64_t tstamp_start, tstamp_end;
 
 	assert(((sizeof(queue) % MN_CACHE_LINE_SIZE) == 0));
 
@@ -107,12 +107,12 @@ MN_TEST_CASE_BEGIN(mn_queue_spsc_stress)
 	while (mn_atomic_load(&threads_ready) < 2) {};
 	mn_atomic_store(&test_ready, 1);
 
-	tstamp_start = mn_tstamp();
+	//tstamp_start = mn_tstamp();
 
 	MN_GUARD_CLEANUP(mn_thread_join(&produce_thread));
 	MN_GUARD_CLEANUP(mn_thread_join(&consume_thread));
 
-	tstamp_end = mn_tstamp();
+	//tstamp_end = mn_tstamp();
 
 	mn_queue_spsc_cleanup(&queue);
 
