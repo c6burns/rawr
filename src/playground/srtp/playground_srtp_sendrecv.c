@@ -6,8 +6,8 @@
 #include "mn/thread.h"
 #include "mn/time.h"
 
-#include "portaudio.h"
 #include "srtp.h"
+#include "portaudio.h"
 
 #ifdef HAVE_UNISTD_H
 #    include <unistd.h> /* for close()         */
@@ -62,8 +62,8 @@ int main(void)
         exit(1);
     }
 
-    //mn_thread_setup(&thread_recv);
-    //mn_thread_launch(&thread_recv, rtp_session_run_recv, NULL);
+    mn_thread_setup(&thread_recv);
+    mn_thread_launch(&thread_recv, rtp_session_run_recv, NULL);
 
     mn_thread_setup(&thread_send);
     mn_thread_launch(&thread_send, rtp_session_run_send, NULL);
@@ -75,10 +75,10 @@ int main(void)
     rtp_session_set_exiting(1);
 
     mn_thread_join(&thread_send);
-    //mn_thread_join(&thread_recv);
+    mn_thread_join(&thread_recv);
 
     mn_thread_cleanup(&thread_send);
-    //mn_thread_cleanup(&thread_recv);
+    mn_thread_cleanup(&thread_recv);
 
     status = srtp_shutdown();
     if (status) {

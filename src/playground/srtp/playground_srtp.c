@@ -1,4 +1,10 @@
-#include "getopt_s.h" /* for local getopt()  */
+#include "playground_srtp.h"
+
+#include "mn/atomic.h"
+#include "mn/error.h"
+#include "mn/log.h"
+#include "mn/thread.h"
+#include "mn/time.h"
 
 #include <errno.h>
 #include <signal.h> /* for signal()        */
@@ -11,7 +17,6 @@
 #ifdef HAVE_UNISTD_H
 #    include <unistd.h> /* for close()         */
 #elif defined(_MSC_VER)
-#    include <Ws2tcpip.h>
 #    include <io.h> /* for _close()        */
 #    define close _close
 #endif
@@ -33,6 +38,10 @@
 #include "srtp.h"
 #include "util.h"
 
+#include "portaudio.h"
+
+#include "opus.h"
+
 #define DICT_FILE "words.txt"
 #define USEC_RATE (5e5)
 #define MAX_WORD_LEN 128
@@ -47,52 +56,115 @@
 #    endif
 #endif
 
-/*
- * the function usage() prints an error message describing how this
- * program should be called, then calls exit()
- */
+#define MAX_PACKET (1500)
+#define SAMPLES (48000 * 30)
+#define SSAMPLES (SAMPLES / 3)
+#define MAX_FRAME_SAMP (5760)
+#define PI (3.141592653589793238462643f)
 
-void usage(char *prog_name);
+/* #define SAMPLE_RATE  (17932) // Test failure to open with this value. */
+#define SAMPLE_RATE (48000)
+#define FRAMES_PER_BUFFER (960)
+#define NUM_SECONDS (10)
+/* #define DITHER_FLAG     (paDitherOff)  */
+#define DITHER_FLAG (0)
 
-/*
- * leave_group(...) de-registers from a multicast group
- */
+/* Select sample format. */
+#if 0
+#    define PA_SAMPLE_TYPE paFloat32
+#    define SAMPLE_SIZE (4)
+#    define SAMPLE_SILENCE (0.0f)
+#    define PRINTF_S_FORMAT "%.8f"
+#elif 1
+#    define PA_SAMPLE_TYPE paInt16
+#    define SAMPLE_SIZE (2)
+#    define SAMPLE_SILENCE (0)
+#    define PRINTF_S_FORMAT "%d"
+#elif 0
+#    define PA_SAMPLE_TYPE paInt24
+#    define SAMPLE_SIZE (3)
+#    define SAMPLE_SILENCE (0)
+#    define PRINTF_S_FORMAT "%d"
+#elif 0
+#    define PA_SAMPLE_TYPE paInt8
+#    define SAMPLE_SIZE (1)
+#    define SAMPLE_SILENCE (0)
+#    define PRINTF_S_FORMAT "%d"
+#else
+#    define PA_SAMPLE_TYPE paUInt8
+#    define SAMPLE_SIZE (1)
+#    define SAMPLE_SILENCE (128)
+#    define PRINTF_S_FORMAT "%d"
+#endif
 
-void leave_group(int sock, struct ip_mreq mreq, char *name);
+int get_frame_size_enum(int frame_size, int sampling_rate)
+{
+    int frame_size_enum;
 
-/*
- * setup_signal_handler() sets up a signal handler to trigger
- * cleanups after an interrupt
- */
-int setup_signal_handler(char *name);
+    if (frame_size == sampling_rate / 400)
+        frame_size_enum = OPUS_FRAMESIZE_2_5_MS;
+    else if (frame_size == sampling_rate / 200)
+        frame_size_enum = OPUS_FRAMESIZE_5_MS;
+    else if (frame_size == sampling_rate / 100)
+        frame_size_enum = OPUS_FRAMESIZE_10_MS;
+    else if (frame_size == sampling_rate / 50)
+        frame_size_enum = OPUS_FRAMESIZE_20_MS;
+    else if (frame_size == sampling_rate / 25)
+        frame_size_enum = OPUS_FRAMESIZE_40_MS;
+    else if (frame_size == 3 * sampling_rate / 50)
+        frame_size_enum = OPUS_FRAMESIZE_60_MS;
+    else if (frame_size == 4 * sampling_rate / 50)
+        frame_size_enum = OPUS_FRAMESIZE_80_MS;
+    else if (frame_size == 5 * sampling_rate / 50)
+        frame_size_enum = OPUS_FRAMESIZE_100_MS;
+    else if (frame_size == 6 * sampling_rate / 50)
+        frame_size_enum = OPUS_FRAMESIZE_120_MS;
 
-/*
- * handle_signal(...) handles interrupt signal to trigger cleanups
- */
+    return frame_size_enum;
+}
 
-volatile int interrupted = 0;
+mn_atomic_t exiting = MN_ATOMIC_INIT(0);
+mn_atomic_t recv_done = MN_ATOMIC_INIT(0);
+mn_atomic_t send_done = MN_ATOMIC_INIT(0);
+
+mn_thread_t thread_recv;
+mn_thread_t thread_send;
+
+
+
+int rtp_session_get_done()
+{
+    return mn_atomic_load(&recv_done) && mn_atomic_load(&send_done);
+}
+
+int rtp_session_get_exiting()
+{
+    return mn_atomic_load(&exiting);
+}
+
+void rtp_session_set_exiting(int val)
+{
+    mn_atomic_store(&exiting, val);
+}
+
 
 /*
  * program_type distinguishes the [s]rtp sender and receiver cases
  */
 
-typedef enum { sender,
-               receiver,
-               unknown } program_type;
 
-int main(int argc, char *argv[])
+void rtp_session_run(program_type prog_type, const char *address, uint16_t port)
 {
     char *dictfile = DICT_FILE;
     FILE *dict;
     char word[MAX_WORD_LEN];
-    int sock, ret;
+    int sock, ret = 0;
     struct in_addr rcvr_addr;
     struct sockaddr_in name;
     struct ip_mreq mreq;
 #if BEW
     struct sockaddr_in local;
 #endif
-    program_type prog_type = unknown;
     srtp_sec_serv_t sec_servs = sec_serv_none;
     unsigned char ttl = 5;
     int c;
@@ -101,9 +173,7 @@ int main(int argc, char *argv[])
     int gcm_on = 0;
     char *input_key = NULL;
     int b64_input = 0;
-    char *address = NULL;
     char key[MAX_KEY_LEN];
-    unsigned short port = 0;
     rtp_sender_t snd;
     srtp_policy_t policy;
     srtp_err_status_t status;
@@ -111,141 +181,162 @@ int main(int argc, char *argv[])
     int expected_len;
     int do_list_mods = 0;
     uint32_t ssrc = 0xdeadbeef; /* ssrc value hardcoded for now */
-#ifdef RTPW_USE_WINSOCK2
-    WORD wVersionRequested = MAKEWORD(2, 0);
-    WSADATA wsaData;
-
-    ret = WSAStartup(wVersionRequested, &wsaData);
-    if (ret != 0) {
-        fprintf(stderr, "error: WSAStartup() failed: %d\n", ret);
-        exit(1);
-    }
-#endif
-
-    memset(&policy, 0x0, sizeof(srtp_policy_t));
-
-    printf("Using %s [0x%x]\n", srtp_get_version_string(), srtp_get_version());
-
-    if (setup_signal_handler(argv[0]) != 0) {
-        exit(1);
-    }
-
-    /* initialize srtp library */
-    status = srtp_init();
-    if (status) {
-        printf("error: srtp initialization failed with error code %d\n", status);
-        exit(1);
-    }
-
-    /* check args */
-    while (1) {
-        c = -1;
-        //c = getopt_s(argc, argv, "b:k:rsgt:ae:ld:w:");
-        if (c == -1) {
-            break;
-        }
-        switch (c) {
-        case 'b':
-            b64_input = 1;
-        /* fall thru */
-        case 'k':
-            //input_key = optarg_s;
-            break;
-        case 'e':
-            //key_size = atoi(optarg_s);
-            //if (key_size != 128 && key_size != 256) {
-            //    printf("error: encryption key size must be 128 or 256 (%d)\n", key_size);
-            //    exit(1);
-            //}
-            //sec_servs |= sec_serv_conf;
-            break;
-        case 't':
-            //tag_size = atoi(optarg_s);
-            //if (tag_size != 8 && tag_size != 16) {
-            //    printf("error: GCM tag size must be 8 or 16 (%d)\n", tag_size);
-            //    exit(1);
-            //}
-            break;
-        case 'a':
-            sec_servs |= sec_serv_auth;
-            break;
-        case 'g':
-            gcm_on = 1;
-            sec_servs |= sec_serv_auth;
-            break;
-        case 'r':
-            prog_type = receiver;
-            break;
-        case 's':
-            prog_type = sender;
-            break;
-        case 'd':
-            //status = srtp_set_debug_module(optarg_s, 1);
-            //if (status) {
-            //    printf("error: set debug module (%s) failed\n", optarg_s);
-            //    exit(1);
-            //}
-            break;
-        case 'l':
-            do_list_mods = 1;
-            break;
-        case 'w':
-            //dictfile = optarg_s;
-            break;
-        default:
-            usage(argv[0]);
-        }
-    }
 
     if (prog_type == unknown) {
-        if (do_list_mods) {
-            status = srtp_list_debug_modules();
-            if (status) {
-                printf("error: list of debug modules failed\n");
-                exit(1);
-            }
-            return 0;
-        } else {
-            printf("error: neither sender [-s] nor receiver [-r] specified\n");
-            usage(argv[0]);
-        }
+        mn_log_trace("error: neither sender nor receiver specified");
+        return;
     }
+
+    memset(&policy, 0x0, sizeof(srtp_policy_t));
 
     if ((sec_servs && !input_key) || (!sec_servs && input_key)) {
         /*
          * a key must be provided if and only if security services have
          * been requested
          */
-        usage(argv[0]);
+        return;
     }
 
-    //if (argc != optind_s + 2) {
-    //    /* wrong number of arguments */
-    //    usage(argv[0]);
-    //}
+    PaStreamParameters inputParameters, outputParameters;
+    PaStream *stream = NULL;
+    PaError err;
+    const PaDeviceInfo *inputInfo;
+    const PaDeviceInfo *outputInfo;
+    char *sampleBlock = NULL;
+    int i;
+    int numBytes;
+    int numChannels;
 
-    ///* get address from arg */
-    //address = argv[optind_s++];
-    address = "192.168.21.39";
-    ///* get port from arg */
-    //port = atoi(argv[optind_s++]);
-    port = 22450;
+    OpusEncoder *enc;
+    OpusDecoder *dec;
+    int j;
+
+    int sampling_rate = 48000;
+    int num_channels = 1;
+    int application = OPUS_APPLICATION_VOIP;
+
+    int samp_count = 0;
+    opus_int16 *inbuf;
+    unsigned char packet[MAX_PACKET + 257];
+    opus_int16 *outbuf;
+    int out_samples;
+
+    int bitrate = OPUS_AUTO;
+    int force_channel = 1;
+    int vbr = 1;
+    int vbr_constraint = 1;
+    int complexity = 5;
+    int max_bw = OPUS_BANDWIDTH_FULLBAND;
+    int sig = OPUS_SIGNAL_VOICE;
+    int inband_fec = 0;
+    int pkt_loss = 1;
+    int lsb_depth = 8;
+    int pred_disabled = 0;
+    int dtx = 1;
+    int frame_size_ms_x2 = 40;
+    int frame_size = frame_size_ms_x2 * sampling_rate / 2000;
+    int frame_size_enum = get_frame_size_enum(frame_size, sampling_rate);
+    force_channel = 1;
+
+    /* Generate input data */
+    inbuf = (opus_int16 *)malloc(sizeof(*inbuf) * SSAMPLES);
+    //generate_music(inbuf, SSAMPLES / 2);
+
+    /* Allocate memory for output data */
+    outbuf = (opus_int16 *)malloc(sizeof(*outbuf) * MAX_FRAME_SAMP * 3);
+
+    mn_log_trace("patest_read_write_wire.c");
+    mn_log_trace("sizeof(int) = %lu", sizeof(int));
+    mn_log_trace("sizeof(long) = %lu", sizeof(long));
+
+    inputParameters.device = Pa_GetDefaultInputDevice(); /* default input device */
+    mn_log_trace("Input device # %d.", inputParameters.device);
+    inputInfo = Pa_GetDeviceInfo(inputParameters.device);
+    mn_log_trace("    Name: %s", inputInfo->name);
+    mn_log_trace("      LL: %g s", inputInfo->defaultLowInputLatency);
+    mn_log_trace("      HL: %g s", inputInfo->defaultHighInputLatency);
+
+    outputParameters.device = Pa_GetDefaultOutputDevice(); /* default output device */
+    mn_log_trace("Output device # %d.", outputParameters.device);
+    outputInfo = Pa_GetDeviceInfo(outputParameters.device);
+    mn_log_trace("   Name: %s", outputInfo->name);
+    mn_log_trace("     LL: %g s", outputInfo->defaultLowOutputLatency);
+    mn_log_trace("     HL: %g s", outputInfo->defaultHighOutputLatency);
+
+    numChannels = inputInfo->maxInputChannels < outputInfo->maxOutputChannels
+                      ? inputInfo->maxInputChannels
+                      : outputInfo->maxOutputChannels;
+    numChannels = 1;
+    mn_log_trace("Num channels = %d.", numChannels);
+
+    inputParameters.channelCount = numChannels;
+    inputParameters.sampleFormat = PA_SAMPLE_TYPE;
+    inputParameters.suggestedLatency = inputInfo->defaultHighInputLatency;
+    inputParameters.hostApiSpecificStreamInfo = NULL;
+
+    outputParameters.channelCount = numChannels;
+    outputParameters.sampleFormat = PA_SAMPLE_TYPE;
+    outputParameters.suggestedLatency = outputInfo->defaultHighOutputLatency;
+    outputParameters.hostApiSpecificStreamInfo = NULL;
+
+    /* -- setup opus -- */
+
+    dec = opus_decoder_create(sampling_rate, num_channels, &err);
+    if (err != OPUS_OK || dec == NULL) return;
+
+    enc = opus_encoder_create(sampling_rate, num_channels, application, &err);
+    if (err != OPUS_OK || enc == NULL) return;
+
+    if (opus_encoder_ctl(enc, OPUS_SET_BITRATE(bitrate)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_FORCE_CHANNELS(force_channel)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_VBR(vbr)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_VBR_CONSTRAINT(vbr_constraint)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY(complexity)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_MAX_BANDWIDTH(max_bw)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_SIGNAL(sig)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_INBAND_FEC(inband_fec)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_PACKET_LOSS_PERC(pkt_loss)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_LSB_DEPTH(lsb_depth)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_PREDICTION_DISABLED(pred_disabled)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_DTX(dtx)) != OPUS_OK) goto cleanup;
+    if (opus_encoder_ctl(enc, OPUS_SET_EXPERT_FRAME_DURATION(frame_size_enum)) != OPUS_OK) goto cleanup;
+
+    mn_log_info("encoder_settings: %d kHz, %d ch, application: %d, "
+                "%d bps, force ch: %d, vbr: %d, vbr constraint: %d, complexity: %d, "
+                "max bw: %d, signal: %d, inband fec: %d, pkt loss: %d%%, lsb depth: %d, "
+                "pred disabled: %d, dtx: %d, (%d/2) ms\n",
+                sampling_rate / 1000,
+                num_channels,
+                application,
+                bitrate,
+                force_channel,
+                vbr,
+                vbr_constraint,
+                complexity,
+                max_bw,
+                sig,
+                inband_fec,
+                pkt_loss,
+                lsb_depth,
+                pred_disabled,
+                dtx,
+                frame_size_ms_x2);
 
 /* set address */
 #ifdef HAVE_INET_ATON
     if (0 == inet_aton(address, &rcvr_addr)) {
-        fprintf(stderr, "%s: cannot parse IP v4 address %s\n", argv[0], address);
+        mn_log_error("%s: cannot parse IP v4 address %s", argv[0], address);
         exit(1);
     }
     if (rcvr_addr.s_addr == INADDR_NONE) {
-        fprintf(stderr, "%s: address error", argv[0]);
+        mn_log_error("%s: address error", argv[0]);
         exit(1);
     }
 #else
     rcvr_addr.s_addr = inet_addr(address);
     if (0xffffffff == rcvr_addr.s_addr) {
-        fprintf(stderr, "%s: cannot parse IP v4 address %s\n", argv[0], address);
-        exit(1);
+        mn_log_error("cannot parse IP v4 address %s", address);
+        return;
     }
 #endif
 
@@ -255,11 +346,12 @@ int main(int argc, char *argv[])
         int err;
 #ifdef RTPW_USE_WINSOCK2
         err = WSAGetLastError();
+        
 #else
         err = errno;
 #endif
-        fprintf(stderr, "%s: couldn't open socket: %d\n", argv[0], err);
-        exit(1);
+        mn_log_error("couldn't open socket: %d", err);
+        return;
     }
 
     memset(&name, 0, sizeof(struct sockaddr_in));
@@ -271,7 +363,7 @@ int main(int argc, char *argv[])
         if (prog_type == sender) {
             ret = setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
             if (ret < 0) {
-                fprintf(stderr, "%s: Failed to set TTL for multicast group", argv[0]);
+                mn_log_error("Failed to set TTL for multicast group");
                 perror("");
                 exit(1);
             }
@@ -281,21 +373,21 @@ int main(int argc, char *argv[])
         mreq.imr_interface.s_addr = htonl(INADDR_ANY);
         ret = setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void *)&mreq, sizeof(mreq));
         if (ret < 0) {
-            fprintf(stderr, "%s: Failed to join multicast group", argv[0]);
+            mn_log_error("Failed to join multicast group");
             perror("");
             exit(1);
         }
     }
 
     /* report security services selected on the command line */
-    printf("security services: ");
+    mn_log_trace("security services: ");
     if (sec_servs & sec_serv_conf)
-        printf("confidentiality ");
+        mn_log_trace("confidentiality ");
     if (sec_servs & sec_serv_auth)
-        printf("message authentication");
+        mn_log_trace("message authentication");
     if (sec_servs == sec_serv_none)
-        printf("none");
-    printf("\n");
+        mn_log_trace("none");
+    mn_log_trace("");
 
     /* set up the srtp policy and master key */
     if (sec_servs) {
@@ -319,9 +411,9 @@ int main(int argc, char *argv[])
                     break;
                 }
 #else
-                printf("error: GCM mode only supported when using the OpenSSL "
-                       "or NSS crypto engine.\n");
-                return 0;
+                mn_log_trace("error: GCM mode only supported when using the OpenSSL "
+                             "or NSS crypto engine.");
+                return;
 #endif
             } else {
                 switch (key_size) {
@@ -339,8 +431,8 @@ int main(int argc, char *argv[])
         case sec_serv_conf:
             if (gcm_on) {
                 printf(
-                    "error: GCM mode must always be used with auth enabled\n");
-                return -1;
+                    "error: GCM mode must always be used with auth enabled");
+                return;
             } else {
                 switch (key_size) {
                 case 128:
@@ -370,9 +462,9 @@ int main(int argc, char *argv[])
                     break;
                 }
 #else
-                printf("error: GCM mode only supported when using the OpenSSL "
-                       "crypto engine.\n");
-                return 0;
+                mn_log_trace("error: GCM mode only supported when using the OpenSSL "
+                             "crypto engine.");
+                return;
 #endif
             } else {
                 srtp_crypto_policy_set_null_cipher_hmac_sha1_80(&policy.rtp);
@@ -380,8 +472,8 @@ int main(int argc, char *argv[])
             }
             break;
         default:
-            printf("error: unknown security service requested\n");
-            return -1;
+            mn_log_trace("error: unknown security service requested");
+            return;
         }
         policy.ssrc.type = ssrc_specific;
         policy.ssrc.value = ssrc;
@@ -406,7 +498,7 @@ int main(int argc, char *argv[])
             expected_len = (policy.rtp.cipher_key_len * 4) / 3;
             len = base64_string_to_octet_string(key, &pad, input_key, expected_len);
             if (pad != 0) {
-                fprintf(stderr, "error: padding in base64 unexpected\n");
+                mn_log_error("error: padding in base64 unexpected");
                 exit(1);
             }
         } else {
@@ -415,22 +507,22 @@ int main(int argc, char *argv[])
         }
         /* check that hex string is the right length */
         if (len < expected_len) {
-            fprintf(stderr, "error: too few digits in key/salt "
-                            "(should be %d digits, found %d)\n",
-                    expected_len,
-                    len);
+            mn_log_error("error: too few digits in key/salt "
+                         "(should be %d digits, found %d)",
+                         expected_len,
+                         len);
             exit(1);
         }
         if ((int)strlen(input_key) > policy.rtp.cipher_key_len * 2) {
-            fprintf(stderr, "error: too many digits in key/salt "
-                            "(should be %d hexadecimal digits, found %u)\n",
-                    policy.rtp.cipher_key_len * 2,
-                    (unsigned)strlen(input_key));
+            mn_log_error("error: too many digits in key/salt "
+                         "(should be %d hexadecimal digits, found %u)",
+                         policy.rtp.cipher_key_len * 2,
+                         (unsigned)strlen(input_key));
             exit(1);
         }
 
-        printf("set master key/salt to %s/", octet_string_hex_string(key, 16));
-        printf("%s\n", octet_string_hex_string(key + 16, 14));
+        mn_log_trace("set master key/salt to %s/", octet_string_hex_string(key, 16));
+        mn_log_trace("%s", octet_string_hex_string(key + 16, 14));
 
     } else {
         /*
@@ -461,7 +553,7 @@ int main(int argc, char *argv[])
         local.sin_port = htons(port);
         ret = bind(sock, (struct sockaddr *)&local, sizeof(struct sockaddr_in));
         if (ret < 0) {
-            fprintf(stderr, "%s: bind failed\n", argv[0]);
+            mn_log_error("%s: bind failed", argv[0]);
             perror("");
             exit(1);
         }
@@ -470,73 +562,144 @@ int main(int argc, char *argv[])
         /* initialize sender's rtp and srtp contexts */
         snd = rtp_sender_alloc();
         if (snd == NULL) {
-            fprintf(stderr, "error: malloc() failed\n");
+            mn_log_error("error: malloc() failed");
             exit(1);
         }
         rtp_sender_init(snd, sock, name, ssrc);
         status = rtp_sender_init_srtp(snd, &policy);
         if (status) {
-            fprintf(stderr, "error: srtp_create() failed with code %d\n", status);
+            mn_log_error("error: srtp_create() failed with code %d", status);
             exit(1);
         }
 
-        /* open dictionary */
-        dict = fopen(dictfile, "r");
-        if (dict == NULL) {
-            fprintf(stderr, "%s: couldn't open file %s\n", argv[0], dictfile);
-            if (ADDR_IS_MULTICAST(rcvr_addr.s_addr)) {
-                leave_group(sock, mreq, argv[0]);
-            }
-            exit(1);
+        err = Pa_OpenStream(
+            &stream,
+            &inputParameters,
+            NULL,
+            SAMPLE_RATE,
+            frame_size,
+            paClipOff, /* we won't output out of range samples so don't bother clipping them */
+            NULL,      /* no callback, use blocking API */
+            NULL);     /* no callback, so no callback userData */
+        if (err != paNoError) return;
+
+        numBytes = FRAMES_PER_BUFFER * numChannels * SAMPLE_SIZE;
+        sampleBlock = (char *)malloc(numBytes);
+        if (sampleBlock == NULL) {
+            mn_log_error("Could not allocate record array.");
+            return;
         }
+        memset(sampleBlock, SAMPLE_SILENCE, numBytes);
 
-        /* read words from dictionary, then send them off */
-        while (!interrupted && fgets(word, MAX_WORD_LEN, dict) != NULL) {
-            len = strlen(word) + 1; /* plus one for null */
+        err = Pa_StartStream(stream);
+        if (err != paNoError) return;
 
-            if (len > MAX_WORD_LEN)
-                printf("error: word %s too large to send\n", word);
-            else {
-                rtp_sendto(snd, word, len);
-                printf("sending word: %s", word);
+        uint64_t sleep_ns, tstamp_ns, tstamp_last_ns;
+        sleep_ns = mn_tstamp_convert(20, MN_TSTAMP_MS, MN_TSTAMP_NS);
+        tstamp_last_ns = 0;
+        while (!mn_atomic_load(&exiting)) {
+            err = Pa_ReadStream(stream, sampleBlock, FRAMES_PER_BUFFER);
+            if (err) {
+                mn_log_error("error reading audio stream");
+                break;
             }
-            usleep(USEC_RATE);
+
+            /* Encode data, then decode for sanity check */
+            samp_count = 0;
+            len = opus_encode(enc, (opus_int16 *)sampleBlock, frame_size, packet, MAX_PACKET);
+            if (len < 0 || len > MAX_PACKET) {
+                mn_log_error("opus_encode() returned %d", len);
+                ret = -1;
+                break;
+            }
+
+            out_samples = opus_decode(dec, packet, len, outbuf, MAX_FRAME_SAMP, 0);
+            if (out_samples != frame_size) {
+                mn_log_error("opus_decode() returned %d", out_samples);
+                ret = -1;
+                break;
+            }
+            samp_count += frame_size;
+
+            mn_log_info("send: %d bytes", len);
+            rtp_sendto(snd, packet, len);
         }
 
         rtp_sender_deinit_srtp(snd);
         rtp_sender_dealloc(snd);
-
-        fclose(dict);
     } else { /* prog_type == receiver */
         rtp_receiver_t rcvr;
 
         if (bind(sock, (struct sockaddr *)&name, sizeof(name)) < 0) {
             close(sock);
-            fprintf(stderr, "%s: socket bind error\n", argv[0]);
+            mn_log_error("socket bind error");
             perror(NULL);
             if (ADDR_IS_MULTICAST(rcvr_addr.s_addr)) {
-                leave_group(sock, mreq, argv[0]);
+                //leave_group(sock, mreq, argv[0]);
             }
             exit(1);
         }
 
         rcvr = rtp_receiver_alloc();
         if (rcvr == NULL) {
-            fprintf(stderr, "error: malloc() failed\n");
+            mn_log_error("error: malloc() failed");
             exit(1);
         }
         rtp_receiver_init(rcvr, sock, name, ssrc);
         status = rtp_receiver_init_srtp(rcvr, &policy);
         if (status) {
-            fprintf(stderr, "error: srtp_create() failed with code %d\n", status);
+            mn_log_error("error: srtp_create() failed with code %d", status);
             exit(1);
         }
 
+        err = Pa_OpenStream(
+            &stream,
+            NULL,
+            &outputParameters,
+            SAMPLE_RATE,
+            frame_size,
+            paClipOff, /* we won't output out of range samples so don't bother clipping them */
+            NULL,      /* no callback, use blocking API */
+            NULL);     /* no callback, so no callback userData */
+        if (err != paNoError) return;
+
+        numBytes = FRAMES_PER_BUFFER * numChannels * SAMPLE_SIZE;
+        sampleBlock = (char *)malloc(numBytes);
+        if (sampleBlock == NULL) {
+            mn_log_error("Could not allocate record array.");
+            return;
+        }
+        memset(sampleBlock, SAMPLE_SILENCE, numBytes);
+
+        err = Pa_StartStream(stream);
+        if (err != paNoError) return;
+
+        err = Pa_WriteStream(stream, sampleBlock, FRAMES_PER_BUFFER);
+        if (err) return;
+
         /* get next word and loop */
-        while (!interrupted) {
-            len = MAX_WORD_LEN;
-            if (rtp_recvfrom(rcvr, word, &len) > -1)
-                printf("\tword: %s\n", word);
+        while (!mn_atomic_load(&exiting)) {
+            len = MAX_PACKET;
+            int rbytes = rtp_recvfrom(rcvr, packet, &len);
+            if (rbytes < 0) {
+                mn_log_error("socket error");
+                break;
+            } else if (rbytes > 0) {
+                mn_log_info("recv: %d bytes", rbytes);
+                out_samples = opus_decode(dec, packet, rbytes, outbuf, MAX_FRAME_SAMP, 0);
+                if (out_samples != frame_size) {
+                    mn_log_error("opus_decode() returned %d", out_samples);
+                    ret = -1;
+                    break;
+                }
+                samp_count += frame_size;
+
+                err = Pa_WriteStream(stream, outbuf, FRAMES_PER_BUFFER);
+                if (err) break;
+            } else {
+                err = Pa_WriteStream(stream, sampleBlock, FRAMES_PER_BUFFER);
+                if (err) break;
+            }
         }
 
         rtp_receiver_deinit_srtp(rcvr);
@@ -544,8 +707,10 @@ int main(int argc, char *argv[])
     }
 
     if (ADDR_IS_MULTICAST(rcvr_addr.s_addr)) {
-        leave_group(sock, mreq, argv[0]);
+        //leave_group(sock, mreq, argv[0]);
     }
+
+cleanup:
 
 #ifdef RTPW_USE_WINSOCK2
     ret = closesocket(sock);
@@ -553,91 +718,24 @@ int main(int argc, char *argv[])
     ret = close(sock);
 #endif
     if (ret < 0) {
-        fprintf(stderr, "%s: Failed to close socket", argv[0]);
+        mn_log_error("Failed to close socket");
         perror("");
     }
 
-    status = srtp_shutdown();
-    if (status) {
-        printf("error: srtp shutdown failed with error code %d\n", status);
-        exit(1);
-    }
-
-#ifdef RTPW_USE_WINSOCK2
-    WSACleanup();
-#endif
-
-    return 0;
+    return;
 }
 
-void usage(char *string)
+void rtp_session_run_recv(void *arg)
 {
-    printf("usage: %s [-d <debug>]* [-k <key> [-a][-e]] "
-           "[-s | -r] dest_ip dest_port\n"
-           "or     %s -l\n"
-           "where  -a use message authentication\n"
-           "       -e <key size> use encryption (use 128 or 256 for key size)\n"
-           "       -g Use AES-GCM mode (must be used with -e)\n"
-           "       -t <tag size> Tag size to use in GCM mode (use 8 or 16)\n"
-           "       -k <key>  sets the srtp master key given in hexadecimal\n"
-           "       -b <key>  sets the srtp master key given in base64\n"
-           "       -s act as rtp sender\n"
-           "       -r act as rtp receiver\n"
-           "       -l list debug modules\n"
-           "       -d <debug> turn on debugging for module <debug>\n"
-           "       -w <wordsfile> use <wordsfile> for input, rather than %s\n",
-           string,
-           string,
-           DICT_FILE);
-    exit(1);
+    rtp_session_run(receiver, "0.0.0.0", 22452);
+    mn_log_warning("receiver thread exiting");
+    mn_atomic_store(&recv_done, 1);
 }
 
-void leave_group(int sock, struct ip_mreq mreq, char *name)
+void rtp_session_run_send(void *arg)
 {
-    int ret;
-
-    ret = setsockopt(sock, IPPROTO_IP, IP_DROP_MEMBERSHIP, (void *)&mreq, sizeof(mreq));
-    if (ret < 0) {
-        fprintf(stderr, "%s: Failed to leave multicast group", name);
-        perror("");
-    }
+    rtp_session_run(sender, "192.168.21.39", 22452);
+    mn_log_warning("sender thread exiting");
+    mn_atomic_store(&send_done, 1);
 }
 
-void handle_signal(int signum)
-{
-    interrupted = 1;
-    /* Reset handler explicitly, in case we don't have sigaction() (and signal()
-       has BSD semantics), or we don't have SA_RESETHAND */
-    signal(signum, SIG_DFL);
-}
-
-int setup_signal_handler(char *name)
-{
-#ifdef HAVE_SIGACTION
-    struct sigaction act;
-    memset(&act, 0, sizeof(act));
-
-    act.sa_handler = handle_signal;
-    sigemptyset(&act.sa_mask);
-#    if defined(SA_RESETHAND)
-    act.sa_flags = SA_RESETHAND;
-#    else
-    act.sa_flags = 0;
-#    endif
-    /* Note that we're not setting SA_RESTART; we want recvfrom to return
-     * EINTR when we signal the receiver. */
-
-    if (sigaction(SIGTERM, &act, NULL) != 0) {
-        fprintf(stderr, "%s: error setting up signal handler", name);
-        perror("");
-        return -1;
-    }
-#else
-    if (signal(SIGTERM, handle_signal) == SIG_ERR) {
-        fprintf(stderr, "%s: error setting up signal handler", name);
-        perror("");
-        return -1;
-    }
-#endif
-    return 0;
-}

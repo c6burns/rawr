@@ -153,21 +153,32 @@ endif()
 
 # playground: srtp
 if (TARGET srtp2)
-    rawr_add_executable(playground_srtp_send
-        src/playground/srtp/rtp.c
+	set(RAWR_SRTP_SRC_COMMON
+		src/playground/srtp/rtp.c
         src/playground/srtp/util.c
         src/playground/srtp/playground_srtp.c
+	)
+
+	rawr_add_executable(playground_srtp_sendrecv
+        ${RAWR_SRTP_SRC_COMMON}
+        src/playground/srtp/playground_srtp_sendrecv.c
+    )
+    target_include_directories(playground_srtp_sendrecv PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
+    target_compile_definitions(playground_srtp_sendrecv PRIVATE HAVE_WINSOCK2_H)
+
+    rawr_add_executable(playground_srtp_send
+        ${RAWR_SRTP_SRC_COMMON}
         src/playground/srtp/playground_srtp_send.c
     )
     target_include_directories(playground_srtp_send PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
+    target_compile_definitions(playground_srtp_send PRIVATE HAVE_WINSOCK2_H)
 
     rawr_add_executable(playground_srtp_recv
-        src/playground/srtp/rtp.c
-        src/playground/srtp/util.c
-        src/playground/srtp/playground_srtp.c
+        ${RAWR_SRTP_SRC_COMMON}
         src/playground/srtp/playground_srtp_recv.c
     )
     target_include_directories(playground_srtp_recv PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
+    target_compile_definitions(playground_srtp_recv PRIVATE HAVE_WINSOCK2_H)
 endif()
 
 # playground: strophe

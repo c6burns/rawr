@@ -55,7 +55,7 @@
 
 #include "cipher_priv.h"
 
-#define PRINT_DEBUG 0   /* set to 1 to print out debugging data */
+#define PRINT_DEBUG 1   /* set to 1 to print out debugging data */
 #define VERBOSE_DEBUG 0 /* set to 1 to print out more data      */
 
 int rtp_sendto(rtp_sender_t sender, const void *msg, int len)
