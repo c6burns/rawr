@@ -238,6 +238,10 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t port)
     int frame_size_enum = get_frame_size_enum(frame_size, sampling_rate);
     force_channel = 1;
 
+    PaDeviceIndex inputDevice = -1, outputDevice = -1;
+    int numDevices;
+    const PaDeviceInfo *deviceInfo;
+
     /* Generate input data */
     inbuf = (opus_int16 *)malloc(sizeof(*inbuf) * SSAMPLES);
     //generate_music(inbuf, SSAMPLES / 2);
@@ -245,39 +249,72 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t port)
     /* Allocate memory for output data */
     outbuf = (opus_int16 *)malloc(sizeof(*outbuf) * MAX_FRAME_SAMP * 3);
 
+    numDevices = Pa_GetDeviceCount();
+    if (numDevices < 0) {
+        printf("ERROR: Pa_GetDeviceCount returned 0x%x\n", numDevices);
+        err = numDevices;
+        return;
+    }
+
+    printf("Number of devices = %d\n", numDevices);
+    for (i = 0; i < numDevices; i++) {
+        deviceInfo = Pa_GetDeviceInfo(i);
+        printf("--------------------------------------- device #%d\n", i);
+
+        /* Mark global and API specific default devices */
+        if (i == Pa_GetDefaultInputDevice()) {
+            inputDevice = i;
+        } else if (i == Pa_GetHostApiInfo(deviceInfo->hostApi)->defaultInputDevice) {
+            const PaHostApiInfo *hostInfo = Pa_GetHostApiInfo(deviceInfo->hostApi);
+            if (!inputDevice) inputDevice = i;
+        }
+
+        if (i == Pa_GetDefaultOutputDevice()) {
+            outputDevice = i;
+        } else if (i == Pa_GetHostApiInfo(deviceInfo->hostApi)->defaultOutputDevice) {
+            const PaHostApiInfo *hostInfo = Pa_GetHostApiInfo(deviceInfo->hostApi);
+            if (!outputDevice) outputDevice = i;
+        }
+    }
+
     mn_log_trace("patest_read_write_wire.c");
     mn_log_trace("sizeof(int) = %lu", sizeof(int));
     mn_log_trace("sizeof(long) = %lu", sizeof(long));
 
-    inputParameters.device = Pa_GetDefaultInputDevice(); /* default input device */
-    mn_log_trace("Input device # %d.", inputParameters.device);
-    inputInfo = Pa_GetDeviceInfo(inputParameters.device);
-    mn_log_trace("    Name: %s", inputInfo->name);
-    mn_log_trace("      LL: %g s", inputInfo->defaultLowInputLatency);
-    mn_log_trace("      HL: %g s", inputInfo->defaultHighInputLatency);
-
-    outputParameters.device = Pa_GetDefaultOutputDevice(); /* default output device */
-    mn_log_trace("Output device # %d.", outputParameters.device);
-    outputInfo = Pa_GetDeviceInfo(outputParameters.device);
-    mn_log_trace("   Name: %s", outputInfo->name);
-    mn_log_trace("     LL: %g s", outputInfo->defaultLowOutputLatency);
-    mn_log_trace("     HL: %g s", outputInfo->defaultHighOutputLatency);
-
-    numChannels = inputInfo->maxInputChannels < outputInfo->maxOutputChannels
-                      ? inputInfo->maxInputChannels
-                      : outputInfo->maxOutputChannels;
+    //numChannels = inputInfo->maxInputChannels < outputInfo->maxOutputChannels
+    //                  ? inputInfo->maxInputChannels
+    //                  : outputInfo->maxOutputChannels;
     numChannels = 1;
     mn_log_trace("Num channels = %d.", numChannels);
 
-    inputParameters.channelCount = numChannels;
-    inputParameters.sampleFormat = PA_SAMPLE_TYPE;
-    inputParameters.suggestedLatency = inputInfo->defaultHighInputLatency;
-    inputParameters.hostApiSpecificStreamInfo = NULL;
+    if (inputDevice >= 0) {
+        inputInfo = Pa_GetDeviceInfo(inputDevice);
+        inputParameters.device = inputDevice;
+        inputParameters.channelCount = numChannels;
+        inputParameters.sampleFormat = PA_SAMPLE_TYPE;
+        inputParameters.suggestedLatency = inputInfo->defaultHighInputLatency;
+        inputParameters.hostApiSpecificStreamInfo = NULL;
 
-    outputParameters.channelCount = numChannels;
-    outputParameters.sampleFormat = PA_SAMPLE_TYPE;
-    outputParameters.suggestedLatency = outputInfo->defaultHighOutputLatency;
-    outputParameters.hostApiSpecificStreamInfo = NULL;
+        mn_log_trace("Input device # %d.", inputParameters.device);
+        mn_log_trace("    Name: %s", inputInfo->name);
+        mn_log_trace("      LL: %g s", inputInfo->defaultLowInputLatency);
+        mn_log_trace("      HL: %g s", inputInfo->defaultHighInputLatency);
+    }
+
+    if (outputDevice >= 0) {
+        outputInfo = Pa_GetDeviceInfo(outputDevice);
+        outputParameters.device = outputDevice;
+        outputParameters.channelCount = numChannels;
+        outputParameters.sampleFormat = PA_SAMPLE_TYPE;
+        outputParameters.suggestedLatency = outputInfo->defaultHighOutputLatency;
+        outputParameters.hostApiSpecificStreamInfo = NULL;
+
+        mn_log_trace("Output device # %d.", outputParameters.device);
+        
+        mn_log_trace("   Name: %s", outputInfo->name);
+        mn_log_trace("     LL: %g s", outputInfo->defaultLowOutputLatency);
+        mn_log_trace("     HL: %g s", outputInfo->defaultHighOutputLatency);
+    }
 
     /* -- setup opus -- */
 
