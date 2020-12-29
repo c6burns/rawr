@@ -243,6 +243,9 @@ if (TARGET libwebsockets)
 	rawr_add_executable(playground_lws src/playground/lws/playground_lws.c)
 	add_dependencies(playground_lws libwebsockets)
     target_link_libraries(playground_lws ${RAWR_LWS_LIBRARIES} ${RAWR_MBEDTLS_LIBRARIES})
+    add_custom_command(TARGET playground_lws POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/AmazonRootCA1.cer $<TARGET_FILE_DIR:playground_lws>
+    )
 endif()
 
 #
