@@ -18,6 +18,7 @@ set(RAWR_LIBUV ON CACHE BOOL "Builds and links libuv as a dependency")
 set(RAWR_MN ON CACHE BOOL "Builds and links libmn as a dependency")
 set(RAWR_OPUS ON CACHE BOOL "Builds and links opus as a dependency")
 set(RAWR_STROPHE ON CACHE BOOL "Builds and links libstrophe as a dependency")
+set(RAWR_JUICE ON CACHE BOOL "Builds and links libjuice as a dependency")
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
@@ -149,6 +150,13 @@ if (RAWR_STROPHE)
 	list(APPEND RAWR_INCLUDE_DIRS deps/libstrophe)
 endif()
 
+# libjuice
+if (RAWR_JUICE)
+	add_subdirectory(deps/libjuice)
+	list(APPEND RAWR_LINK_LIBS juice)
+	list(APPEND RAWR_INCLUDE_DIRS deps/libjuice/include)
+endif()
+
 #
 # library
 
@@ -186,6 +194,12 @@ macro(rawr_add_executable rname)
 	if (TARGET uv)
 		add_custom_command(TARGET ${rname} POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:uv> $<TARGET_FILE_DIR:${rname}>
+		)
+	endif()
+
+    if (TARGET juice)
+		add_custom_command(TARGET ${rname} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:juice> $<TARGET_FILE_DIR:${rname}>
 		)
 	endif()
 endmacro()
@@ -246,6 +260,11 @@ if (TARGET libwebsockets)
     add_custom_command(TARGET playground_lws POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/AmazonRootCA1.cer $<TARGET_FILE_DIR:playground_lws>
     )
+endif()
+
+# playground: libjuice
+if (TARGET juice)
+	rawr_add_executable(playground_juice src/playground/juice/playground_juice.c)
 endif()
 
 #
