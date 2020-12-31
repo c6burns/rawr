@@ -50,7 +50,7 @@
 
 #include <sys/types.h>
 #ifdef HAVE_SYS_SOCKET_H
-#include <sys/socket.h>
+#    include <sys/socket.h>
 #endif
 
 #include "cipher_priv.h"
@@ -68,10 +68,16 @@ int rtp_sendto(rtp_sender_t sender, const void *msg, int len)
     strncpy(sender->message.body, msg, len);
 
     /* update header */
+    sender->message.header.pt = 0x66; /* opus */
     sender->message.header.seq = ntohs(sender->message.header.seq) + 1;
     sender->message.header.seq = htons(sender->message.header.seq);
-    sender->message.header.ts = ntohl(sender->message.header.ts) + 1;
-    sender->message.header.ts = htonl(sender->message.header.ts);
+    sender->message.header.ts = ntohl(sender->message.header.ts);
+    if (!sender->message.header.ts) {
+        sender->message.header.m = 1;
+    } else {
+        sender->message.header.m = 0;
+    }
+    sender->message.header.ts = htonl(sender->message.header.ts + 960);
 
     /* apply srtp */
     stat = srtp_protect(sender->srtp_ctx, &sender->message.header, &pkt_len);
@@ -85,8 +91,7 @@ int rtp_sendto(rtp_sender_t sender, const void *msg, int len)
     srtp_print_packet(&sender->message.header, pkt_len);
 #endif
     octets_sent =
-        sendto(sender->socket, (void *)&sender->message, pkt_len, 0,
-               (struct sockaddr *)&sender->addr, sizeof(struct sockaddr_in));
+        sendto(sender->socket, (void *)&sender->message, pkt_len, 0, (struct sockaddr *)&sender->addr, sizeof(struct sockaddr_in));
 
     if (octets_sent != pkt_len) {
 #if PRINT_DEBUG
@@ -103,8 +108,7 @@ int rtp_recvfrom(rtp_receiver_t receiver, void *msg, int *len)
     int octets_recvd;
     srtp_err_status_t stat;
 
-    octets_recvd = recvfrom(receiver->socket, (void *)&receiver->message, *len,
-                            0, (struct sockaddr *)NULL, 0);
+    octets_recvd = recvfrom(receiver->socket, (void *)&receiver->message, *len, 0, (struct sockaddr *)NULL, 0);
 
     if (octets_recvd == -1) {
         *len = 0;
@@ -118,23 +122,16 @@ int rtp_recvfrom(rtp_receiver_t receiver, void *msg, int *len)
     }
 
 #if PRINT_DEBUG
-    fprintf(stderr, "%d octets received from SSRC %u\n", octets_recvd,
-            receiver->message.header.ssrc);
+    fprintf(stderr, "%d octets received from SSRC %u\n", octets_recvd, receiver->message.header.ssrc);
 #endif
 #if VERBOSE_DEBUG
     srtp_print_packet(&receiver->message.header, octets_recvd);
 #endif
 
     /* apply srtp */
-    stat = srtp_unprotect(receiver->srtp_ctx, &receiver->message.header,
-                          &octets_recvd);
+    stat = srtp_unprotect(receiver->srtp_ctx, &receiver->message.header, &octets_recvd);
     if (stat) {
-        fprintf(stderr, "error: srtp unprotection failed with code %d%s\n",
-                stat,
-                stat == srtp_err_status_replay_fail
-                    ? " (replay check failed)"
-                    : stat == srtp_err_status_auth_fail ? " (auth check failed)"
-                                                        : "");
+        fprintf(stderr, "error: srtp unprotection failed with code %d%s\n", stat, stat == srtp_err_status_replay_fail ? " (replay check failed)" : stat == srtp_err_status_auth_fail ? " (auth check failed)" : "");
         return -1;
     }
     strncpy(msg, receiver->message.body, octets_recvd);
@@ -142,10 +139,7 @@ int rtp_recvfrom(rtp_receiver_t receiver, void *msg, int *len)
     return octets_recvd;
 }
 
-int rtp_sender_init(rtp_sender_t sender,
-                    int sock,
-                    struct sockaddr_in addr,
-                    unsigned int ssrc)
+int rtp_sender_init(rtp_sender_t sender, int sock, struct sockaddr_in addr, unsigned int ssrc)
 {
     /* set header values */
     sender->message.header.ssrc = htonl(ssrc);
@@ -165,10 +159,7 @@ int rtp_sender_init(rtp_sender_t sender,
     return 0;
 }
 
-int rtp_receiver_init(rtp_receiver_t rcvr,
-                      int sock,
-                      struct sockaddr_in addr,
-                      unsigned int ssrc)
+int rtp_receiver_init(rtp_receiver_t rcvr, int sock, struct sockaddr_in addr, unsigned int ssrc)
 {
     /* set header values */
     rcvr->message.header.ssrc = htonl(ssrc);

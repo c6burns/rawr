@@ -19,6 +19,7 @@ set(RAWR_MN ON CACHE BOOL "Builds and links libmn as a dependency")
 set(RAWR_OPUS ON CACHE BOOL "Builds and links opus as a dependency")
 set(RAWR_STROPHE ON CACHE BOOL "Builds and links libstrophe as a dependency")
 set(RAWR_JUICE ON CACHE BOOL "Builds and links libjuice as a dependency")
+set(RAWR_RE ON CACHE BOOL "Builds and links libre as a dependency")
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
@@ -157,6 +158,14 @@ if (RAWR_JUICE)
 	list(APPEND RAWR_INCLUDE_DIRS deps/libjuice/include)
 endif()
 
+# libjuice
+if (RAWR_RE)
+	add_subdirectory(deps/re/mk)
+	list(APPEND RAWR_LINK_LIBS re)
+	list(APPEND RAWR_INCLUDE_DIRS deps/re/include)
+endif()
+
+
 #
 # library
 
@@ -239,11 +248,18 @@ if (TARGET portaudio AND TARGET opus AND TARGET srtp2)
         src/playground/srtp/playground_srtp_recv.c
     )
     target_include_directories(playground_srtp_recv PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
+
+    rawr_add_executable(playground_srtp_siprecv
+        ${RAWR_SRTP_SRC_COMMON}
+        src/playground/srtp/playground_srtp_siprecv.c
+    )
+    target_include_directories(playground_srtp_siprecv PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
 	
 	if (WIN32)
 		target_compile_definitions(playground_srtp_sendrecv PRIVATE HAVE_WINSOCK2_H)
 		target_compile_definitions(playground_srtp_send PRIVATE HAVE_WINSOCK2_H)
 		target_compile_definitions(playground_srtp_recv PRIVATE HAVE_WINSOCK2_H)
+        target_compile_definitions(playground_srtp_siprecv PRIVATE HAVE_WINSOCK2_H)
 	endif()
 endif()
 
@@ -266,6 +282,12 @@ endif()
 if (TARGET juice)
 	rawr_add_executable(playground_juice src/playground/juice/playground_juice.c)
 endif()
+
+# playground: re
+if (TARGET re)
+	rawr_add_executable(playground_re_sip src/playground/re/playground_re_sip.c)
+endif()
+
 
 #
 # cmake target
