@@ -723,12 +723,11 @@ int main(int argc, char *argv[])
 
     /* TODO: grab our external IP here using STUN */
     sa_set_str(&ext_addr, re_ext_ip, 0);
-
     sa_set_port(&laddr, 0);
-    //sa_set_str(&laddr, re_ext_ip, 0);
+
     /* add supported SIP transports */
-    err |= sip_transp_add_ext(re_sip, SIP_TRANSP_UDP, &ext_addr, &laddr);
-    //err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
+    //err |= sip_transp_add_ext(re_sip, SIP_TRANSP_UDP, &ext_addr, &laddr);
+    err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
     if (err) {
         re_fprintf(stderr, "transport error: %s\n", strerror(err));
         goto out;
@@ -742,7 +741,7 @@ int main(int argc, char *argv[])
     }
 
     /* create the RTP/RTCP socket */
-    //net_default_source_addr_get(AF_INET, &laddr);
+    net_default_source_addr_get(AF_INET, &laddr);
     err = rtp_listen(&re_rtp, IPPROTO_UDP, &laddr, 16384, 32767, true, rtp_handler, rtcp_handler, NULL);
     if (err) {
         re_fprintf(stderr, "rtp listen error: %m\n", err);
@@ -751,7 +750,7 @@ int main(int argc, char *argv[])
     re_local_port = sa_port(rtp_local(re_rtp));
     re_printf("local RTP port is %u\n", sa_port(rtp_local(re_rtp)));
 
-    //sa_set_str(&laddr, re_ext_ip, re_local_port);
+    sa_set_str(&laddr, re_ext_ip, re_local_port);
     /* create SDP session */
     err = sdp_session_alloc(&re_sdp, &laddr);
     if (err) {
@@ -774,7 +773,7 @@ int main(int argc, char *argv[])
     }
 
     /* invite provided URI */
-    if (0) {
+    if (1) {
         const char const *invite_uri = "sip:3300@sip.serverlynx.net"; // conference
         //const char const *invite_uri = "sip:9195@sip.serverlynx.net"; // 5s delay echo test
         //const char const *invite_uri = "sip:9196@sip.serverlynx.net"; // echo test

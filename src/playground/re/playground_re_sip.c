@@ -10,11 +10,11 @@ static struct sipreg *re_reg;             /* SIP registration   */
 static struct sip *re_sip;                /* SIP stack          */
 static struct rtp_sock *re_rtp;           /* RTP socket         */
 
-const char *re_registrar = "sip:sip.serverlynx.net";
-const char *re_uri = "sip:1001@serverlynx.net";
+const char *re_registrar = "sip:3.223.157.6";
+const char *re_uri = "sip:1001@3.223.157.6";
 const char *re_name = "Chris Burns";
 const char *re_user = "1001";
-const char *re_pass = "422423";
+const char *re_pass = "874465";
 
 /* terminate */
 static void terminate(void)
