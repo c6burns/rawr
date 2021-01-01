@@ -726,8 +726,8 @@ int main(int argc, char *argv[])
     sa_set_port(&laddr, 0);
 
     /* add supported SIP transports */
-    //err |= sip_transp_add_ext(re_sip, SIP_TRANSP_UDP, &ext_addr, &laddr);
-    err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
+    err |= sip_transp_add_ext(re_sip, SIP_TRANSP_UDP, &ext_addr, &laddr);
+    //err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
     if (err) {
         re_fprintf(stderr, "transport error: %s\n", strerror(err));
         goto out;
