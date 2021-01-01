@@ -13,6 +13,7 @@
 
 #include <string.h>
 
+#define UDP_OVERHEAD_BYTES 54
 #define MAX_PACKET (1500)
 #define SAMPLES (48000 * 30)
 #define SSAMPLES (SAMPLES / 3)
@@ -65,6 +66,8 @@ opus_int16 *opus_inbuf;
 unsigned char opus_packet[MAX_PACKET + 257];
 opus_int16 *opus_outbuf;
 int opus_frame_size;
+
+uint64_t rtp_bytes_sent, rtp_wait_ns, rtp_tstamp_last;
 
 void rtp_session_run_sip_sendrecv(void *arg)
 {
@@ -221,9 +224,10 @@ void rtp_session_send_thread(void *arg)
     re_mb = mbuf_alloc(300);
     mbuf_init(re_mb);
 
-    uint64_t sleep_ns, tstamp_ns, tstamp_last_ns;
-    sleep_ns = mn_tstamp_convert(20, MN_TSTAMP_MS, MN_TSTAMP_NS);
-    tstamp_last_ns = 0;
+    uint64_t bytes_sent, wait_ns, tstamp, tstamp_last;
+    wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
+    bytes_sent = 0;
+    tstamp_last = mn_tstamp();
     while (1) {
         int len, ret, out_samples;
 
@@ -243,11 +247,21 @@ void rtp_session_send_thread(void *arg)
         }
 
         mbuf_reset(re_mb);
-        mbuf_resize(re_mb, len + RTP_HEADER_SIZE);
+        mbuf_resize(re_mb, (size_t)len + RTP_HEADER_SIZE);
         mbuf_advance(re_mb, RTP_HEADER_SIZE);
-        mbuf_write_mem(re_mb, sampleBlock, len);
+        mbuf_write_mem(re_mb, opus_packet, len);
+        mbuf_advance(re_mb, -len);
 
-        rtp_send(re_rtp, sdp_media_raddr(re_sdp_media), 0, 0, 0x66, re_ts, re_mb);
+        bytes_sent += len + UDP_OVERHEAD_BYTES;
+        re_ts += 960;
+        rtp_send(re_rtp, sdp_media_raddr(re_sdp_media), 0, 0, 0x74, re_ts, re_mb);
+
+        tstamp = mn_tstamp();
+        if ((tstamp - tstamp_last) > wait_ns) {
+            mn_log_warning("send rate: %.2f KB/s", (double)bytes_sent / 1024.0);
+            tstamp_last = tstamp;
+            bytes_sent = 0;
+        }
     }
 
     return;
@@ -397,9 +411,20 @@ static void rtp_handler(const struct sa *src, const struct rtp_header *hdr, stru
 
         err = Pa_WriteStream(pa_stream_write, sampleBlock, FRAMES_PER_BUFFER);
         if (err) return;
+
+        rtp_wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
+        rtp_bytes_sent = 0;
+        rtp_tstamp_last = mn_tstamp();
     }
 
-    re_printf("rtp: recv %zu bytes from %J\n", mbuf_get_left(mb), src);
+    //re_printf("rtp: recv %zu bytes from %J\n", mbuf_get_left(mb), src);
+    rtp_bytes_sent += mbuf_get_left(mb) + UDP_OVERHEAD_BYTES;
+    uint64_t tstamp = mn_tstamp();
+    if ((tstamp - rtp_tstamp_last) > rtp_wait_ns) {
+        mn_log_warning("recv rate: %.2f KB/s", (double)rtp_bytes_sent / 1024.0);
+        rtp_tstamp_last = tstamp;
+        rtp_bytes_sent = 0;
+    }
 
     {
         int out_samples, ret;
@@ -586,6 +611,7 @@ out:
         (void)sip_treply(NULL, re_sip, msg, 500, strerror(err));
     } else {
         re_printf("accepting incoming call from <%r>\n", &msg->from.auri);
+        mn_thread_launch(&thread_recv, rtp_session_send_thread, NULL);
     }
 }
 
