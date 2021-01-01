@@ -7,6 +7,7 @@
 #include "mn/time.h"
 #include "playground_srtp.h"
 
+#include "juice/juice.h"
 #include "opus.h"
 #include "portaudio.h"
 #include "srtp.h"
@@ -45,7 +46,7 @@ const char *re_uri = "sip:1001@serverlynx.net";
 const char *re_name = "Chris Burns";
 const char *re_user = "1001";
 const char *re_pass = "422423";
-const char *re_ext_ip = "136.60.233.221";
+char *re_ext_ip = NULL;
 
 mn_thread_t thread_recv;
 
@@ -68,6 +69,9 @@ opus_int16 *opus_outbuf;
 int opus_frame_size;
 
 uint64_t rtp_bytes_sent, rtp_wait_ns, rtp_tstamp_last;
+
+static juice_agent_t *juice_agent;
+mn_atomic_t juice_complete = MN_ATOMIC_INIT(0);
 
 void rtp_session_run_sip_sendrecv(void *arg)
 {
@@ -643,6 +647,58 @@ static void signal_handler(int sig)
     terminate();
 }
 
+static void on_juice_state_changed(juice_agent_t *agent, juice_state_t state, void *user_ptr)
+{
+    printf("State 1: %s\n", juice_state_to_string(state));
+
+    if (state == JUICE_STATE_CONNECTED) {
+        // Agent 1: on connected, send a message
+        const char *message = "Hello from 1";
+        juice_send(agent, message, strlen(message));
+    }
+}
+
+static void on_juice_candidate(juice_agent_t *agent, const char *sdp, void *user_ptr)
+{
+    mn_log_info("juice candidate: %s", sdp);
+
+    const char *split = " ";
+    char *token;
+    char *sdp_str = strdup(sdp);
+    int i = 0;
+
+    char *ext_ip = NULL;
+
+    token = strtok(sdp_str, split);
+    while (token) {
+        mn_log_debug("%d: %s", i, token);
+
+        if (i == 4) {
+            ext_ip = strdup(token);
+        } else if (i == 7) {
+            if (strcmp(token, "srflx")) {
+                ext_ip = NULL;
+            }
+            break;
+        }
+
+        token = strtok(NULL, split);
+        i++;
+    }
+
+    if (ext_ip) {
+        mn_log_warning("FOUND EXTERNAL IP: %s", ext_ip);
+        re_ext_ip = ext_ip;
+    }
+}
+
+static void on_juice_gathering_done(juice_agent_t *agent, void *user_ptr)
+{
+    mn_log_info("juice gathering done");
+    juice_set_remote_gathering_done(agent);
+    mn_atomic_store(&juice_complete, 1);
+}
+
 int main(int argc, char *argv[])
 {
     struct sa nsv[16];
@@ -655,6 +711,42 @@ int main(int argc, char *argv[])
     int ret;
 
     mn_log_setup();
+
+    juice_set_log_level(JUICE_LOG_LEVEL_NONE);
+    juice_config_t config1;
+    memset(&config1, 0, sizeof(config1));
+    config1.stun_server_host = "stun.l.google.com";
+    config1.stun_server_port = 19302;
+    config1.cb_state_changed = on_juice_state_changed;
+    config1.cb_candidate = on_juice_candidate;
+    config1.cb_gathering_done = on_juice_gathering_done;
+    config1.cb_recv = NULL;
+    config1.user_ptr = NULL;
+
+    juice_agent = juice_create(&config1);
+
+    char sdp1[JUICE_MAX_SDP_STRING_LEN];
+    juice_get_local_description(juice_agent, sdp1, JUICE_MAX_SDP_STRING_LEN);
+    printf("Local description 1:\n%s\n", sdp1);
+
+    // Agent 2: Receive description from agent 1
+    //juice_set_remote_description(agent2, sdp1);
+
+    // Agent 2: Generate local description
+    char sdp2[JUICE_MAX_SDP_STRING_LEN];
+    //juice_get_local_description(agent2, sdp2, JUICE_MAX_SDP_STRING_LEN);
+    //printf("Local description 2:\n%s\n", sdp2);
+
+    // Agent 1: Receive description from agent 2
+    juice_set_remote_description(juice_agent, sdp2);
+
+    // Agent 1: Gather candidates (and send them to agent 2)
+    juice_gather_candidates(juice_agent);
+
+    while (!mn_atomic_load(&juice_complete)) {
+        mn_thread_sleep_ms(5);
+    }
+
 
     err = Pa_Initialize();
     if (err != paNoError) return -1;
@@ -774,6 +866,7 @@ int main(int argc, char *argv[])
 
     /* invite provided URI */
     if (1) {
+        //const char const *invite_uri = "sip:1002@sip.serverlynx.net"; // c6 cell user
         const char const *invite_uri = "sip:3300@sip.serverlynx.net"; // conference
         //const char const *invite_uri = "sip:9195@sip.serverlynx.net"; // 5s delay echo test
         //const char const *invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
