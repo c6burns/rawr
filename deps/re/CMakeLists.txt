@@ -1,24 +1,34 @@
 cmake_minimum_required(VERSION 3.15)
 project(re LANGUAGES C)
 
-set(${RE_SRCS} ${RE_SRCS} src/crc32/crasdasdsac32.c)
+set(APPLE_SYSCONFIG)
+if (APPLE)
+	find_library(APPLE_SYSCONFIG SystemConfiguration)
+	find_library(APPLE_CORE CoreFoundation)
+	set(OPENSSL_ROOT_DIR /usr/local/opt/openssl)
+endif()
+find_package(OpenSSL REQUIRED)
+
+set(CMAKE_OSX_DEPLOYMENT_TARGET 10.12)
+
+set(RE_SRC
 	src/hmac/apple/hmac.c
 	src/hmac/hmac.c
 	src/hmac/hmac_sha1.c
 	src/hmac/openssl/hmac.c
+
 	src/md5/wrap.c
 	src/md5/md5.c
-	src/net/posix/pif.c
+
 	src/net/netstr.c
 	src/net/bsd/brt.c
 	src/net/ifaddrs.c
 	src/net/if.c
 	src/net/sockopt.c
 	src/net/sock.c
-	src/net/linux/rt.c
 	src/net/rt.c
 	src/net/net.c
-	src/net/win32/wif.c
+
 	src/stun/msg.c
 	src/stun/keepalive.c
 	src/stun/hdr.c
@@ -31,7 +41,9 @@ set(${RE_SRCS} ${RE_SRCS} src/crc32/crasdasdsac32.c)
 	src/stun/attr.c
 	src/stun/req.c
 	src/stun/stun.c
+
 	src/jbuf/jbuf.c
+
 	src/sipsess/request.c
 	src/sipsess/info.c
 	src/sipsess/listen.c
@@ -42,18 +54,23 @@ set(${RE_SRCS} ${RE_SRCS} src/crc32/crasdasdsac32.c)
 	src/sipsess/ack.c
 	src/sipsess/close.c
 	src/sipsess/sess.c
+
 	src/udp/udp.c
 	src/udp/mcast.c
+
 	src/msg/param.c
 	src/msg/ctype.c
+
 	src/hash/func.c
 	src/hash/hash.c
+
 	src/natbd/genalg.c
 	src/natbd/lifetime.c
 	src/natbd/hairpinning.c
 	src/natbd/natstr.c
 	src/natbd/mapping.c
 	src/natbd/filtering.c
+
 	src/fmt/str_error.c
 	src/fmt/unicode.c
 	src/fmt/ch.c
@@ -64,11 +81,15 @@ set(${RE_SRCS} ${RE_SRCS} src/crc32/crasdasdsac32.c)
 	src/fmt/time.c
 	src/fmt/prm.c
 	src/fmt/regex.c
+
 	src/mqueue/mqueue.c
-	src/mqueue/win32/pipe.c
+
 	src/base64/b64.c
+
 	src/dbg/dbg.c
+
 	src/sipreg/reg.c
+
 	src/ice/comp.c
 	src/ice/icesdp.c
 	src/ice/util.c
@@ -80,56 +101,73 @@ set(${RE_SRCS} ${RE_SRCS} src/crc32/crasdasdsac32.c)
 	src/ice/chklist.c
 	src/ice/icem.c
 	src/ice/connchk.c
+
 	src/lock/rwlock.c
 	src/lock/lock.c
-	src/lock/win32/lock.c
+
 	src/sipevent/msg.c
 	src/sipevent/subscribe.c
 	src/sipevent/listen.c
 	src/sipevent/notify.c
+
 	src/bfcp/msg.c
 	src/bfcp/request.c
 	src/bfcp/conn.c
 	src/bfcp/attr.c
 	src/bfcp/reply.c
+
 	src/websock/websock.c
+
 	src/httpauth/basic.c
 	src/httpauth/digest.c
+
 	src/crc32/crc32.c
+
 	src/turn/chan.c
 	src/turn/turnc.c
 	src/turn/perm.c
+
 	src/tmr/tmr.c
+
 	src/odict/odict.c
 	src/odict/get.c
 	src/odict/type.c
 	src/odict/entry.c
+
 	src/sa/ntop.c
 	src/sa/printaddr.c
 	src/sa/pton.c
 	src/sa/sa.c
+
 	src/telev/telev.c
+
 	src/sys/rand.c
 	src/sys/sys.c
 	src/sys/fs.c
 	src/sys/sleep.c
 	src/sys/daemon.c
 	src/sys/endian.c
+
 	src/json/decode_odict.c
 	src/json/decode.c
 	src/json/encode.c
+
 	src/tls/openssl/tls_tcp.c
 	src/tls/openssl/tls_udp.c
 	src/tls/openssl/tls.c
+
 	src/tcp/tcp.c
 	src/tcp/tcp_high.c
+
 	src/http/msg.c
 	src/http/auth.c
 	src/http/request.c
 	src/http/server.c
 	src/http/client.c
 	src/http/chunk.c
+
 	src/list/list.c
+
 	src/sdp/session.c
 	src/sdp/msg.c
 	src/sdp/util.c
@@ -137,6 +175,7 @@ set(${RE_SRCS} ${RE_SRCS} src/crc32/crasdasdsac32.c)
 	src/sdp/str.c
 	src/sdp/attr.c
 	src/sdp/media.c
+
 	src/rtp/ntp.c
 	src/rtp/fb.c
 	src/rtp/rr.c
@@ -147,7 +186,9 @@ set(${RE_SRCS} ${RE_SRCS} src/crc32/crasdasdsac32.c)
 	src/rtp/source.c
 	src/rtp/rtp.c
 	src/rtp/sess.c
+
 	src/sha/sha1.c
+
 	src/rtmp/amf_dec.c
 	src/rtmp/dechunk.c
 	src/rtmp/hdr.c
@@ -158,6 +199,7 @@ set(${RE_SRCS} ${RE_SRCS} src/crc32/crasdasdsac32.c)
 	src/rtmp/chunk.c
 	src/rtmp/amf.c
 	src/rtmp/stream.c
+
 	src/sip/strans.c
 	src/sip/contact.c
 	src/sip/msg.c
@@ -173,12 +215,14 @@ set(${RE_SRCS} ${RE_SRCS} src/crc32/crasdasdsac32.c)
 	src/sip/dialog.c
 	src/sip/sip.c
 	src/sip/keepalive_udp.c
+
 	src/mbuf/mbuf.c
+
 	src/main/init.c
 	src/main/main.c
 	src/main/method.c
 	src/main/openssl.c
-	src/main/epoll.c
+
 	src/dns/rr.c
 	src/dns/hdr.c
 	src/dns/res.c
@@ -186,23 +230,72 @@ set(${RE_SRCS} ${RE_SRCS} src/crc32/crasdasdsac32.c)
 	src/dns/rrlist.c
 	src/dns/dname.c
 	src/dns/client.c
-	src/dns/darwin/srv.c
-	src/dns/win32/srv.c
 	src/dns/ns.c
+
 	src/srtp/replay.c
 	src/srtp/srtcp.c
 	src/srtp/srtp.c
 	src/srtp/misc.c
 	src/srtp/stream.c
+
 	src/uri/uric.c
 	src/uri/uri.c
+
 	src/conf/conf.c
+
 	src/mod/mod.c
 	src/mod/dl.c
-	src/mod/win32/dll.c
+
 	src/mem/mem.c
 	src/mem/secure.c
+
 	src/aes/apple/aes.c
 	src/aes/stub.c
 	src/aes/openssl/aes.c
 )
+set(RE_SRC_OSX
+	src/net/posix/pif.c
+	src/dns/darwin/srv.c
+)
+set(RE_SRC_WIN
+	src/net/win32/wif.c
+	src/lock/win32/lock.c
+	src/mqueue/win32/pipe.c
+	src/dns/win32/srv.c
+	src/mod/win32/dll.c
+)
+set(RE_SRC_LIN
+	src/net/linux/rt.c
+	src/main/epoll.c
+)
+
+set(RE_DEFINES)
+if (APPLE)
+	list(APPEND RE_DEFINES HAVE_UNISTD_H HAVE_SYS_TIME_H _DARWIN_C_SOURCE)
+	set(RE_SRC ${RE_SRC} ${RE_SRC_OSX})
+elseif (UNIX)
+	list(APPEND RE_DEFINES HAVE_UNISTD_H HAVE_SYS_TIME_H)
+	set(RE_SRC ${RE_SRC} ${RE_SRC_LIN})
+elseif (WIN32)
+	set(RE_SRC ${RE_SRC} ${RE_SRC_WIN})
+else()
+	message(FATAL_ERROR "re can only build on Windows and Posix dekstops (for now)")
+endif()
+
+add_library(re_main ${RE_SRC})
+target_compile_definitions(re_main PRIVATE
+	${RE_DEFINES}
+)
+target_include_directories(re_main PRIVATE
+	include
+	${OPENSSL_INCLUDE_DIR}
+)
+target_link_libraries(re_main
+	${OPENSSL_LIBRARIES}
+	${APPLE_CORE}
+	${APPLE_SYSCONFIG}
+)
+
+if (NOT WIN32)
+	target_link_libraries(re_main resolv)
+endif()
