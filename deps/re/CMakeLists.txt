@@ -12,7 +12,6 @@ find_package(OpenSSL REQUIRED)
 set(CMAKE_OSX_DEPLOYMENT_TARGET 10.12)
 
 set(RE_SRC
-	src/hmac/apple/hmac.c
 	src/hmac/hmac.c
 	src/hmac/hmac_sha1.c
 	src/hmac/openssl/hmac.c
@@ -21,8 +20,6 @@ set(RE_SRC
 	src/md5/md5.c
 
 	src/net/netstr.c
-	src/net/bsd/brt.c
-	src/net/ifaddrs.c
 	src/net/if.c
 	src/net/sockopt.c
 	src/net/sock.c
@@ -101,9 +98,6 @@ set(RE_SRC
 	src/ice/chklist.c
 	src/ice/icem.c
 	src/ice/connchk.c
-
-	src/lock/rwlock.c
-	src/lock/lock.c
 
 	src/sipevent/msg.c
 	src/sipevent/subscribe.c
@@ -225,7 +219,6 @@ set(RE_SRC
 
 	src/dns/rr.c
 	src/dns/hdr.c
-	src/dns/res.c
 	src/dns/cstr.c
 	src/dns/rrlist.c
 	src/dns/dname.c
@@ -244,16 +237,24 @@ set(RE_SRC
 	src/conf/conf.c
 
 	src/mod/mod.c
-	src/mod/dl.c
 
 	src/mem/mem.c
 	src/mem/secure.c
 
-	src/aes/apple/aes.c
 	src/aes/stub.c
 	src/aes/openssl/aes.c
 )
+set(RE_SRC_POSIX
+	src/net/bsd/brt.c
+	src/net/ifaddrs.c
+	src/dns/res.c
+    src/mod/dl.c
+	src/lock/lock.c
+	src/lock/rwlock.c
+)
 set(RE_SRC_OSX
+    src/aes/apple/aes.c
+    src/hmac/apple/hmac.c
 	src/net/posix/pif.c
 	src/dns/darwin/srv.c
 )
@@ -272,30 +273,30 @@ set(RE_SRC_LIN
 set(RE_DEFINES)
 if (APPLE)
 	list(APPEND RE_DEFINES HAVE_UNISTD_H HAVE_SYS_TIME_H _DARWIN_C_SOURCE)
-	set(RE_SRC ${RE_SRC} ${RE_SRC_OSX})
+	set(RE_SRC ${RE_SRC} ${RE_SRC_OSX} ${RE_SRC_POSIX})
 elseif (UNIX)
 	list(APPEND RE_DEFINES HAVE_UNISTD_H HAVE_SYS_TIME_H)
-	set(RE_SRC ${RE_SRC} ${RE_SRC_LIN})
+	set(RE_SRC ${RE_SRC} ${RE_SRC_LIN} ${RE_SRC_POSIX})
 elseif (WIN32)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_WIN})
 else()
 	message(FATAL_ERROR "re can only build on Windows and Posix dekstops (for now)")
 endif()
 
-add_library(re_main ${RE_SRC})
-target_compile_definitions(re_main PRIVATE
+add_library(re ${RE_SRC})
+target_compile_definitions(re PRIVATE
 	${RE_DEFINES}
 )
-target_include_directories(re_main PRIVATE
+target_include_directories(re PRIVATE
 	include
 	${OPENSSL_INCLUDE_DIR}
 )
-target_link_libraries(re_main
+target_link_libraries(re
 	${OPENSSL_LIBRARIES}
 	${APPLE_CORE}
 	${APPLE_SYSCONFIG}
 )
 
 if (NOT WIN32)
-	target_link_libraries(re_main resolv)
+	target_link_libraries(re resolv)
 endif()
