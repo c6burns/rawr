@@ -245,7 +245,6 @@ set(RE_SRC
 	src/aes/openssl/aes.c
 )
 set(RE_SRC_POSIX
-	src/net/bsd/brt.c
 	src/net/ifaddrs.c
 	src/dns/res.c
     src/mod/dl.c
@@ -275,7 +274,7 @@ if (APPLE)
 	list(APPEND RE_DEFINES HAVE_UNISTD_H HAVE_SYS_TIME_H _DARWIN_C_SOURCE)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_OSX} ${RE_SRC_POSIX})
 elseif (UNIX)
-	list(APPEND RE_DEFINES HAVE_UNISTD_H HAVE_SYS_TIME_H)
+	list(APPEND RE_DEFINES HAVE_UNISTD_H HAVE_SYS_TIME_H HAVE_INTTYPES_H)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_LIN} ${RE_SRC_POSIX})
 elseif (WIN32)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_WIN})
