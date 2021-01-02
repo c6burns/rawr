@@ -57,6 +57,7 @@ int markedfirst = 0;
 uint32_t re_ts = 0;
 struct mbuf *re_mb = NULL;
 uint8_t re_buf[300] = {0};
+int re_receiver = 0;
 
 int pa_init = 0;
 PaStream *pa_stream_read = NULL;
@@ -258,7 +259,9 @@ void rtp_session_send_thread(void *arg)
 
         bytes_sent += len + UDP_OVERHEAD_BYTES;
         re_ts += 960;
-        rtp_send(re_rtp, sdp_media_raddr(re_sdp_media), 0, 0, 0x74, re_ts, re_mb);
+        uint8_t rtp_type = 0x74;
+        if (re_receiver) rtp_type = 0x66;
+        rtp_send(re_rtp, sdp_media_raddr(re_sdp_media), 0, 0, rtp_type, re_ts, re_mb);
 
         tstamp = mn_tstamp();
         if ((tstamp - tstamp_last) > wait_ns) {
@@ -508,6 +511,7 @@ static int offer_handler(struct mbuf **mbp, const struct sip_msg *msg, void *arg
         }
 
         re_printf("SDP offer received\n");
+        re_receiver = 0;
         update_media();
     } else {
         re_printf("sending SDP offer\n");
@@ -529,7 +533,7 @@ static int answer_handler(const struct sip_msg *msg, void *arg)
         re_fprintf(stderr, "unable to decode SDP answer: %s\n", strerror(err));
         return err;
     }
-
+    re_receiver = 0;
     update_media();
 
     return 0;
@@ -592,6 +596,7 @@ static void connect_handler(const struct sip_msg *msg, void *arg)
             goto out;
         }
 
+        re_receiver = 1;
         update_media();
     }
 
@@ -867,9 +872,9 @@ int main(int argc, char *argv[])
     /* invite provided URI */
     if (1) {
         //const char const *invite_uri = "sip:1002@sip.serverlynx.net"; // c6 cell user
-        const char const *invite_uri = "sip:3300@sip.serverlynx.net"; // conference
+        //const char const *invite_uri = "sip:3300@sip.serverlynx.net"; // conference
         //const char const *invite_uri = "sip:9195@sip.serverlynx.net"; // 5s delay echo test
-        //const char const *invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
+        const char const *invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
         //const char const *invite_uri = "sip:9197@sip.serverlynx.net"; // tone 1
         //const char const *invite_uri = "sip:9198@sip.serverlynx.net"; // tone 2
         struct mbuf *mb;
