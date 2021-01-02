@@ -146,6 +146,11 @@ elseif(WIN32)
 	
 endif()
 
+if (APPLE)
+	find_library(APPLE_SYSCONFIG SystemConfiguration)
+	list(APPEND RE_SRCS ../src/crc32/crc32.c)
+endif()
+
 include_directories(${RE_ROOT}/include ${OPENSSL_INCLUDE_DIR})
 
 add_library(re ${RE_SRCS} ${HEADER_FILES})
@@ -154,3 +159,7 @@ target_link_libraries(re ${OPENSSL_LIBRARIES})
 SET_TARGET_PROPERTIES(re PROPERTIES
 	COMPILE_FLAGS ${RE_CFLAGS}
 )
+
+if (APPLE)
+	target_link_libraries(re ${APPLE_SYSCONFIG})
+endif()

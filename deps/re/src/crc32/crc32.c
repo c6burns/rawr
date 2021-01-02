@@ -106,7 +106,7 @@ static const uint32_t crc32_tab[] = {
  *
  * @return CRC value
  */
-uint32_t crc32(uint32_t crc, const void *buf, uint32_t size)
+uint32_t crc32_re(uint32_t crc, const void *buf, uint32_t size)
 {
 	const uint8_t *p = buf;
 
