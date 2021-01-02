@@ -29,6 +29,8 @@
 #    include <arpa/inet.h>
 #endif
 
+#include <stdlib.h>
+
 mn_thread_t thread_recv;
 mn_thread_t thread_send;
 

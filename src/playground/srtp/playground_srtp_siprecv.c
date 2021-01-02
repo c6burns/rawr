@@ -13,6 +13,7 @@
 #include "srtp.h"
 
 #include <string.h>
+#include <stdlib.h>
 
 #define UDP_OVERHEAD_BYTES 54
 #define MAX_PACKET (1500)
@@ -77,7 +78,7 @@ mn_atomic_t juice_complete = MN_ATOMIC_INIT(0);
 void rtp_session_run_sip_sendrecv(void *arg)
 {
     mn_log_warning("STARTING: %s:%u <-> %u", "0.0.0.0", re_local_port, re_remote_port);
-    rtp_session_bothlegs_run(re_remote_ip, re_local_port, re_remote_port);
+    //rtp_session_bothlegs_run(re_remote_ip, re_local_port, re_remote_port);
     mn_log_warning("receiver thread exiting");
 }
 

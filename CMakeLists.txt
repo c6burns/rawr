@@ -61,7 +61,7 @@ if (RAWR_LWS)
     ExternalProject_Add(libwebsockets
         DEPENDS           mbedtls
         GIT_REPOSITORY    https://github.com/warmcat/libwebsockets.git
-        GIT_TAG           v3.2.3
+        GIT_TAG           v4.1.6
         PREFIX            ${CMAKE_CURRENT_BINARY_DIR}/deps
         CMAKE_ARGS
             -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/deps/install

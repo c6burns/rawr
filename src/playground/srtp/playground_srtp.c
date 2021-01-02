@@ -34,6 +34,13 @@
 #    include <arpa/inet.h>
 #endif
 
+#ifndef _WIN32
+#   include <unistd.h>
+#   include <sys/socket.h>
+#   include <netinet/in.h>
+#   include <arpa/inet.h>
+#endif
+
 #include "rtp.h"
 #include "srtp.h"
 #include "util.h"
@@ -351,11 +358,11 @@ void rtp_session_bothlegs_run(const char *address, uint16_t local_port, uint16_t
 #ifdef HAVE_INET_ATON
     if (0 == inet_aton(address, &rcvr_addr)) {
         mn_log_error("cannot parse IP v4 address %s", address);
-        exit(1);
+        return;
     }
     if (rcvr_addr.s_addr == INADDR_NONE) {
         mn_log_error("address error");
-        exit(1);
+        return;
     }
 #else
     rcvr_addr.s_addr = inet_addr(address);
@@ -504,7 +511,7 @@ void rtp_session_bothlegs_run(const char *address, uint16_t local_port, uint16_t
             len = base64_string_to_octet_string(key, &pad, input_key, expected_len);
             if (pad != 0) {
                 mn_log_error("error: padding in base64 unexpected");
-                exit(1);
+                return;
             }
         } else {
             expected_len = policy.rtp.cipher_key_len * 2;
@@ -516,14 +523,14 @@ void rtp_session_bothlegs_run(const char *address, uint16_t local_port, uint16_t
                          "(should be %d digits, found %d)",
                          expected_len,
                          len);
-            exit(1);
+            return;
         }
         if ((int)strlen(input_key) > policy.rtp.cipher_key_len * 2) {
             mn_log_error("error: too many digits in key/salt "
                          "(should be %d hexadecimal digits, found %u)",
                          policy.rtp.cipher_key_len * 2,
                          (unsigned)strlen(input_key));
-            exit(1);
+            return;
         }
 
         mn_log_trace("set master key/salt to %s/", octet_string_hex_string(key, 16));
@@ -558,19 +565,19 @@ void rtp_session_bothlegs_run(const char *address, uint16_t local_port, uint16_t
     if (ret < 0) {
         mn_log_error("bind failed");
         perror("");
-        exit(1);
+        return;
     }
 
     rcvr = rtp_receiver_alloc();
     if (rcvr == NULL) {
         mn_log_error("recv: error: malloc() failed");
-        exit(1);
+        return;
     }
     rtp_receiver_init(rcvr, sock, name, ssrc);
     status = rtp_receiver_init_srtp(rcvr, &policy);
     if (status) {
         mn_log_error("recv: error: srtp_create() failed with code %d", status);
-        exit(1);
+        return;
     }
 
     err = Pa_OpenStream(
@@ -603,13 +610,13 @@ void rtp_session_bothlegs_run(const char *address, uint16_t local_port, uint16_t
     snd = rtp_sender_alloc();
     if (snd == NULL) {
         mn_log_error("send: error: malloc() failed");
-        exit(1);
+        return;
     }
     rtp_sender_init(snd, sock, name, ssrc);
     status = rtp_sender_init_srtp(snd, &policy);
     if (status) {
         mn_log_error("send: error: srtp_create() failed with code %d", status);
-        exit(1);
+        return;
     }
 
     err = Pa_OpenStream(
@@ -930,11 +937,11 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t local
 #ifdef HAVE_INET_ATON
     if (0 == inet_aton(address, &rcvr_addr)) {
         mn_log_error("cannot parse IP v4 address %s", address);
-        exit(1);
+        return;
     }
     if (rcvr_addr.s_addr == INADDR_NONE) {
         mn_log_error("address error");
-        exit(1);
+        return;
     }
 #else
     rcvr_addr.s_addr = inet_addr(address);
@@ -969,7 +976,7 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t local
             if (ret < 0) {
                 mn_log_error("Failed to set TTL for multicast group");
                 perror("");
-                exit(1);
+                return;
             }
         }
 
@@ -979,7 +986,7 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t local
         if (ret < 0) {
             mn_log_error("Failed to join multicast group");
             perror("");
-            exit(1);
+            return;
         }
     }
 
@@ -1103,7 +1110,7 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t local
             len = base64_string_to_octet_string(key, &pad, input_key, expected_len);
             if (pad != 0) {
                 mn_log_error("error: padding in base64 unexpected");
-                exit(1);
+                return;
             }
         } else {
             expected_len = policy.rtp.cipher_key_len * 2;
@@ -1115,14 +1122,14 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t local
                          "(should be %d digits, found %d)",
                          expected_len,
                          len);
-            exit(1);
+            return;
         }
         if ((int)strlen(input_key) > policy.rtp.cipher_key_len * 2) {
             mn_log_error("error: too many digits in key/salt "
                          "(should be %d hexadecimal digits, found %u)",
                          policy.rtp.cipher_key_len * 2,
                          (unsigned)strlen(input_key));
-            exit(1);
+            return;
         }
 
         mn_log_trace("set master key/salt to %s/", octet_string_hex_string(key, 16));
@@ -1157,20 +1164,20 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t local
         if (ret < 0) {
             mn_log_error("bind failed");
             perror("");
-            exit(1);
+            return;
         }
 
         /* initialize sender's rtp and srtp contexts */
         snd = rtp_sender_alloc();
         if (snd == NULL) {
             mn_log_error("send: error: malloc() failed");
-            exit(1);
+            return;
         }
         rtp_sender_init(snd, sock, name, ssrc);
         status = rtp_sender_init_srtp(snd, &policy);
         if (status) {
             mn_log_error("send: error: srtp_create() failed with code %d", status);
-            exit(1);
+            return;
         }
 
         err = Pa_OpenStream(
@@ -1238,19 +1245,19 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t local
             if (ADDR_IS_MULTICAST(rcvr_addr.s_addr)) {
                 //leave_group(sock, mreq, argv[0]);
             }
-            exit(1);
+            return;
         }
 
         rcvr = rtp_receiver_alloc();
         if (rcvr == NULL) {
             mn_log_error("recv: error: malloc() failed");
-            exit(1);
+            return;
         }
         rtp_receiver_init(rcvr, sock, name, ssrc);
         status = rtp_receiver_init_srtp(rcvr, &policy);
         if (status) {
             mn_log_error("recv: error: srtp_create() failed with code %d", status);
-            exit(1);
+            return;
         }
 
         err = Pa_OpenStream(
