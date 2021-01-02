@@ -23,7 +23,6 @@ set(RE_SRC
 	src/net/if.c
 	src/net/sockopt.c
 	src/net/sock.c
-	src/net/rt.c
 	src/net/net.c
 
 	src/stun/msg.c
@@ -245,6 +244,7 @@ set(RE_SRC
 	src/aes/openssl/aes.c
 )
 set(RE_SRC_POSIX
+	src/net/posix/pif.c
 	src/net/ifaddrs.c
 	src/dns/res.c
     src/mod/dl.c
@@ -254,30 +254,32 @@ set(RE_SRC_POSIX
 set(RE_SRC_OSX
     src/aes/apple/aes.c
     src/hmac/apple/hmac.c
-	src/net/posix/pif.c
+	src/net/rt.c
 	src/dns/darwin/srv.c
 )
 set(RE_SRC_WIN
 	src/net/win32/wif.c
+	src/net/rt.c
 	src/lock/win32/lock.c
 	src/mqueue/win32/pipe.c
 	src/dns/win32/srv.c
 	src/mod/win32/dll.c
 )
 set(RE_SRC_LIN
-	src/net/linux/rt.c
+#	src/net/linux/rt.c
+	src/net/rt.c
 	src/main/epoll.c
 )
 
-set(RE_DEFINES)
+set(RE_DEFINES HAVE_INTTYPES_H HAVE_STDBOOL_H HAVE_INET_PTON HAVE_SELECT HAVE_SELECT_H HAVE_SIGNAL HAVE_STRINGS_H)
 if (APPLE)
-	list(APPEND RE_DEFINES HAVE_SYS_TIME_H _DARWIN_C_SOURCE DARWIN HAVE_KQUEUE)
+	list(APPEND RE_DEFINES HAVE_PTHREAD HAVE_RESOLV HAVE_UNISTD_H HAVE_INET_NTOP HAVE_SYS_TIME_H _DARWIN_C_SOURCE DARWIN HAVE_KQUEUE)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_OSX} ${RE_SRC_POSIX})
 elseif (UNIX)
-	list(APPEND RE_DEFINES LINUX HAVE_EPOLL)
+	list(APPEND RE_DEFINES HAVE_PTHREAD HAVE_RESOLV HAVE_UNISTD_H HAVE_INET_NTOP HAVE_SYS_TIME_H LINUX HAVE_EPOLL HAVE_POLL)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_LIN} ${RE_SRC_POSIX})
 elseif (WIN32)
-	list(APPEND RE_DEFINED WIN32 _WIN32_WINNT=0x0501 __ssize_t_defined HAVE_POLL)
+	list(APPEND RE_DEFINED HAVE_INET_NTOP WIN32 _WIN32_WINNT=0x0501 __ssize_t_defined HAVE_SELECT HAVE_IO_H HAVE_POLL)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_WIN})
 else()
 	message(FATAL_ERROR "re can only build on Windows and Posix dekstops (for now)")
@@ -300,3 +302,5 @@ target_link_libraries(re
 if (NOT WIN32)
 	target_link_libraries(re resolv)
 endif()
+
+set(RE_DEFINES ${RE_DEFINES} PARENT_SCOPE)
