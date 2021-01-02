@@ -159,9 +159,9 @@ if (RAWR_JUICE)
 	list(APPEND RAWR_INCLUDE_DIRS deps/libjuice/include)
 endif()
 
-# libjuice
+# re
 if (RAWR_RE)
-	add_subdirectory(deps/re/mk)
+	add_subdirectory(deps/re)
 	list(APPEND RAWR_LINK_LIBS re)
 	list(APPEND RAWR_INCLUDE_DIRS deps/re/include)
 endif()
@@ -192,6 +192,7 @@ rawr_add_library(rawr
 
 macro(rawr_add_executable rname)
     add_executable(${rname} ${ARGN})
+    target_compile_definitions(${rname} PRIVATE ${RE_DEFINES})
 	target_link_libraries(${rname} rawr ${RAWR_LINK_LIBS})
     target_include_directories(${rname} PRIVATE ${RAWR_INCLUDE_DIRS})
 	
