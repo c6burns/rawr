@@ -162,6 +162,8 @@ void rtp_session_send_thread(void *arg)
         mn_log_trace("    Name: %s", inputInfo->name);
         mn_log_trace("      LL: %g s", inputInfo->defaultLowInputLatency);
         mn_log_trace("      HL: %g s", inputInfo->defaultHighInputLatency);
+    } else {
+        mn_log_error("Woah! No input device!");
     }
 
     /* -- setup opus -- */
@@ -227,8 +229,7 @@ void rtp_session_send_thread(void *arg)
     if (err != paNoError) return;
 
     // set up buffer for rtmp packets
-    re_mb = mbuf_alloc(300);
-    mbuf_init(re_mb);
+    re_mb = mbuf_alloc(MAX_PACKET);
 
     uint64_t bytes_sent, wait_ns, tstamp, tstamp_last;
     wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
@@ -252,9 +253,8 @@ void rtp_session_send_thread(void *arg)
             break;
         }
 
-        mbuf_reset(re_mb);
-        mbuf_resize(re_mb, (size_t)len + RTP_HEADER_SIZE);
-        mbuf_advance(re_mb, RTP_HEADER_SIZE);
+        mbuf_rewind(re_mb);
+        mbuf_fill(re_mb, 0, RTP_HEADER_SIZE);
         mbuf_write_mem(re_mb, opus_packet, len);
         mbuf_advance(re_mb, -len);
 
@@ -872,12 +872,12 @@ int main(int argc, char *argv[])
 
     /* invite provided URI */
     if (1) {
-        //const char const *invite_uri = "sip:1002@sip.serverlynx.net"; // c6 cell user
-        //const char const *invite_uri = "sip:3300@sip.serverlynx.net"; // conference
-        //const char const *invite_uri = "sip:9195@sip.serverlynx.net"; // 5s delay echo test
-        const char const *invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
-        //const char const *invite_uri = "sip:9197@sip.serverlynx.net"; // tone 1
-        //const char const *invite_uri = "sip:9198@sip.serverlynx.net"; // tone 2
+        //const char *const invite_uri = "sip:1002@sip.serverlynx.net"; // c6 cell user
+        //const char *const invite_uri = "sip:3300@sip.serverlynx.net"; // conference
+        //const char *const invite_uri = "sip:9195@sip.serverlynx.net"; // 5s delay echo test
+        const char *const invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
+        //const char *const invite_uri = "sip:9197@sip.serverlynx.net"; // tone 1
+        //const char *const invite_uri = "sip:9198@sip.serverlynx.net"; // tone 2
         struct mbuf *mb;
 
         /* create SDP offer */
