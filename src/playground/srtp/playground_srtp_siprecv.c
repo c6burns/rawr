@@ -417,8 +417,10 @@ static void rtp_handler(const struct sa *src, const struct rtp_header *hdr, stru
         err = Pa_StartStream(pa_stream_write);
         if (err != paNoError) return;
 
-        err = Pa_WriteStream(pa_stream_write, sampleBlock, FRAMES_PER_BUFFER);
-        if (err) return;
+        for (int primer = 0; primer < 4; primer++) {
+            err = Pa_WriteStream(pa_stream_write, sampleBlock, FRAMES_PER_BUFFER);
+            if (err) return;
+        }
 
         rtp_wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
         rtp_bytes_sent = 0;

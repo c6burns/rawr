@@ -233,8 +233,10 @@ int main(void)
     mn_log_trace("Wire on. Will run %d seconds.", NUM_SECONDS);
 
      // You may get underruns or overruns if the output is not primed by PortAudio.
-    err = Pa_WriteStream(stream, sampleBlock, FRAMES_PER_BUFFER);
-    if (err) goto xrun;
+    for (int primer = 0; primer < 4; primer++) {
+        err = Pa_WriteStream(stream, sampleBlock, FRAMES_PER_BUFFER);
+        if (err) goto xrun;
+    }
 
     for (i = 0; i < (NUM_SECONDS * SAMPLE_RATE) / FRAMES_PER_BUFFER; ++i) {
         err = Pa_ReadStream(stream, sampleBlock, FRAMES_PER_BUFFER);
