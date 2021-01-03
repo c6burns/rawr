@@ -21,6 +21,7 @@ set(RE_SRC
 
 	src/net/netstr.c
 	src/net/if.c
+	src/net/rt.c
 	src/net/sockopt.c
 	src/net/sock.c
 	src/net/net.c
@@ -253,14 +254,13 @@ set(RE_SRC_POSIX
 	src/lock/rwlock.c
 )
 set(RE_SRC_OSX
+	src/net/bsd/brt.c
     src/aes/apple/aes.c
     src/hmac/apple/hmac.c
-	src/net/rt.c
 	src/dns/darwin/srv.c
 )
 set(RE_SRC_WIN
 	src/net/win32/wif.c
-	src/net/rt.c
 	src/lock/win32/lock.c
 	src/mqueue/win32/pipe.c
 	src/dns/win32/srv.c
@@ -268,7 +268,6 @@ set(RE_SRC_WIN
 )
 set(RE_SRC_LIN
 #	src/net/linux/rt.c
-	src/net/rt.c
 	src/main/epoll.c
 )
 
@@ -276,18 +275,37 @@ set(RE_SRC_LIN
 # defines - crucial to the operation of re
 
 # common
-set(RE_DEFINES HAVE_STDBOOL_H HAVE_SELECT)
+set(RE_DEFINES HAVE_STDBOOL_H HAVE_INET6 HAVE_SELECT)
 set(RE_LIBRARIES resolv)
 
 # posix
 if (UNIX)
-    list(APPEND RE_DEFINES HAVE_SIGNAL HAVE_PTHREAD HAVE_RESOLV HAVE_UNISTD_H HAVE_INET_NTOP HAVE_INET_PTON HAVE_SYS_TIME_H HAVE_INTTYPES_H HAVE_STRINGS_H HAVE_SELECT_H)
+    list(APPEND RE_DEFINES
+		HAVE_SIGNAL
+		HAVE_PTHREAD
+		HAVE_RESOLV
+		HAVE_UNISTD_H
+		HAVE_INET_NTOP
+		HAVE_INET_PTON
+		HAVE_SYS_TIME_H
+		HAVE_INTTYPES_H
+		HAVE_STRINGS_H
+		HAVE_GETOPT
+		HAVE_NET_ROUTE_H
+		HAVE_ROUTE_LIST
+		HAVE_SYS_SYSCTL_H
+		HAVE_SYSLOG
+		HAVE_FORK
+		HAVE_SETRLIMIT
+		HAVE_UNAME
+		HAVE_SELECT_H
+	)
     set(RE_LIBRARIES)
 endif()
 
 # osx
 if (APPLE)
-    list(APPEND RE_DEFINES _DARWIN_C_SOURCE DARWIN HAVE_KQUEUE)
+    list(APPEND RE_DEFINES _DARWIN_C_SOURCE DARWIN USE_ZLIB HAVE_GETIFADDRS HAVE_STRERROR_R HAVE_STRINGS_H HAVE_KQUEUE)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_OSX} ${RE_SRC_POSIX})
 
 # linux
