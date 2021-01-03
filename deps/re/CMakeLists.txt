@@ -7,14 +7,14 @@ if (APPLE)
 	find_library(APPLE_CORE CoreFoundation)
 	set(OPENSSL_ROOT_DIR /usr/local/opt/openssl)
 endif()
-find_package(OpenSSL REQUIRED)
+#find_package(OpenSSL REQUIRED)
 
 set(CMAKE_OSX_DEPLOYMENT_TARGET 10.12)
 
 set(RE_SRC
 	src/hmac/hmac.c
 	src/hmac/hmac_sha1.c
-	src/hmac/openssl/hmac.c
+	#src/hmac/openssl/hmac.c
 
 	src/md5/wrap.c
 	src/md5/md5.c
@@ -145,9 +145,10 @@ set(RE_SRC
 	src/json/decode.c
 	src/json/encode.c
 
-	src/tls/openssl/tls_tcp.c
-	src/tls/openssl/tls_udp.c
-	src/tls/openssl/tls.c
+    # no OpenSSL for now
+	#src/tls/openssl/tls_tcp.c
+	#src/tls/openssl/tls_udp.c
+	#src/tls/openssl/tls.c
 
 	src/tcp/tcp.c
 	src/tcp/tcp_high.c
@@ -214,7 +215,7 @@ set(RE_SRC
 	src/main/init.c
 	src/main/main.c
 	src/main/method.c
-	src/main/openssl.c
+	#src/main/openssl.c
 
 	src/dns/rr.c
 	src/dns/hdr.c
@@ -241,7 +242,7 @@ set(RE_SRC
 	src/mem/secure.c
 
 	src/aes/stub.c
-	src/aes/openssl/aes.c
+	#src/aes/openssl/aes.c
 )
 set(RE_SRC_POSIX
 	src/net/posix/pif.c
@@ -271,19 +272,41 @@ set(RE_SRC_LIN
 	src/main/epoll.c
 )
 
-set(RE_DEFINES HAVE_INTTYPES_H HAVE_STDBOOL_H HAVE_INET_PTON HAVE_SELECT HAVE_SELECT_H HAVE_SIGNAL HAVE_STRINGS_H)
+#
+# defines - crucial to the operation of re
+
+# common
+set(RE_DEFINES HAVE_STDBOOL_H HAVE_SELECT)
+set(RE_LIBRARIES resolv)
+
+# posix
+if (UNIX)
+    list(APPEND RE_DEFINES HAVE_SIGNAL HAVE_PTHREAD HAVE_RESOLV HAVE_UNISTD_H HAVE_INET_NTOP HAVE_INET_PTON HAVE_SYS_TIME_H HAVE_INTTYPES_H HAVE_STRINGS_H HAVE_SELECT_H)
+    set(RE_LIBRARIES)
+endif()
+
+# osx
 if (APPLE)
-	list(APPEND RE_DEFINES HAVE_PTHREAD HAVE_RESOLV HAVE_UNISTD_H HAVE_INET_NTOP HAVE_SYS_TIME_H _DARWIN_C_SOURCE DARWIN HAVE_KQUEUE)
+    list(APPEND RE_DEFINES _DARWIN_C_SOURCE DARWIN HAVE_KQUEUE)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_OSX} ${RE_SRC_POSIX})
+
+# linux
 elseif (UNIX)
-	list(APPEND RE_DEFINES HAVE_PTHREAD HAVE_RESOLV HAVE_UNISTD_H HAVE_INET_NTOP HAVE_SYS_TIME_H LINUX HAVE_EPOLL HAVE_POLL)
+    list(APPEND RE_DEFINES LINUX HAVE_EPOLL HAVE_POLL)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_LIN} ${RE_SRC_POSIX})
+
+# windows
 elseif (WIN32)
-	list(APPEND RE_DEFINED HAVE_INET_NTOP WIN32 _WIN32_WINNT=0x0501 __ssize_t_defined HAVE_SELECT HAVE_IO_H HAVE_POLL)
+    list(APPEND WIN32 _CONSOLE _CRT_SECURE_NO_DEPRECATE HAVE_IO_H HAVE_POLL)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_WIN})
+
+# um no ...
 else()
 	message(FATAL_ERROR "re can only build on Windows and Posix dekstops (for now)")
 endif()
+
+#
+# library target
 
 add_library(re ${RE_SRC})
 target_compile_definitions(re PRIVATE
@@ -299,8 +322,7 @@ target_link_libraries(re
 	${APPLE_SYSCONFIG}
 )
 
-if (NOT WIN32)
-	target_link_libraries(re resolv)
-endif()
-
+# push these values up to the parent scope, in case we're the child
 set(RE_DEFINES ${RE_DEFINES} PARENT_SCOPE)
+set(RE_INCLUDE_DIRS ${RE_INCLUDE_DIRS} PARENT_SCOPE)
+set(RE_LIBRARIES ${RE_LIBRARIES} PARENT_SCOPE)
