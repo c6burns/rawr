@@ -8,6 +8,9 @@ enable_testing()
 
 set(RAWR_INCLUDE_DIRS include)
 set(RAWR_LINK_LIBS)
+if (NOT WIN32)
+	list(APPEND RAWR_LINK_LIBS resolv)
+endif()
 
 set(RAWR_MBEDTLS OFF CACHE BOOL "Builds and links mbedtls as a dependency")
 set(RAWR_LWS OFF CACHE BOOL "Builds and links libwebsockets as a dependency")
