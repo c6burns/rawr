@@ -169,6 +169,12 @@ if (RAWR_RE)
 	list(APPEND RAWR_INCLUDE_DIRS deps/re/include)
 endif()
 
+#
+# dynamic shared object
+
+add_library(rawrDSO MODULE src/dso/dso.c)
+target_link_libraries(rawrDSO ${RAWR_LINK_LIBS})
+target_include_directories(rawrDSO PRIVATE ${RAWR_INCLUDE_DIRS})
 
 #
 # library
