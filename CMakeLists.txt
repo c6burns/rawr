@@ -291,7 +291,7 @@ endif()
 # playground: re
 if (TARGET re)
 	rawr_add_executable(playground_re_sip src/playground/re/playground_re_sip.c)
-	target_link_libraries(playground_re_sip ${APPLE_SYSCONFIG})
+    rawr_add_executable(playground_ice src/playground/re/playground_ice.c)
 endif()
 
 
