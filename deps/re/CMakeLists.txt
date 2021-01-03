@@ -267,7 +267,7 @@ set(RE_SRC_WIN
 	src/mod/win32/dll.c
 )
 set(RE_SRC_LIN
-#	src/net/linux/rt.c
+	src/net/linux/rt.c
 	src/main/epoll.c
 )
 
