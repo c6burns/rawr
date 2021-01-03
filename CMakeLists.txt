@@ -173,6 +173,7 @@ endif()
 # dynamic shared object
 
 add_library(rawrDSO MODULE src/dso/dso.c)
+target_compile_definitions(rawrDSO PRIVATE RAWR_EXPORTS)
 target_link_libraries(rawrDSO ${RAWR_LINK_LIBS})
 target_include_directories(rawrDSO PRIVATE ${RAWR_INCLUDE_DIRS})
 
