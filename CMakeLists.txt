@@ -169,6 +169,13 @@ if (RAWR_RE)
 	list(APPEND RAWR_INCLUDE_DIRS deps/re/include)
 endif()
 
+#
+# dynamic shared object
+
+add_library(rawrDSO MODULE src/dso/dso.c)
+target_compile_definitions(rawrDSO PRIVATE RAWR_EXPORTS)
+target_link_libraries(rawrDSO ${RAWR_LINK_LIBS})
+target_include_directories(rawrDSO PRIVATE ${RAWR_INCLUDE_DIRS})
 
 #
 # library
@@ -182,11 +189,13 @@ endmacro()
 rawr_add_library(rawr
 	include/rawr/app.h
 	include/rawr/buf.h
-	include/rawr/pa.h
+	include/rawr/audio.h
+    include/rawr/ring.h
 	include/rawr/term.h
 	src/app.c
 	src/buf.c
-	src/pa.c
+	src/audio.c
+    src/ring.c
 	src/term.c
 )
 
@@ -226,6 +235,12 @@ endif()
 # playground: portaudio + opus
 if (TARGET portaudio AND TARGET opus)
     rawr_add_executable(playground_pa src/playground/pa/playground_pa.c)
+endif()
+
+# playground: portaudio
+if (TARGET portaudio)
+    rawr_add_executable(playground_pa_callbacks src/playground/pa/playground_pa_callbacks.c)
+    target_link_libraries(playground_pa_callbacks portaudio)
 endif()
 
 # playground: srtp

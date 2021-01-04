@@ -1,7 +1,6 @@
-#include "rawr/pa.h"
-
 #include "rawr/term.h"
-#include "rawr/pa.h"
+#include "rawr/audio.h"
+
 #include "mn/thread.h"
 #include "mn/time.h"
 
@@ -49,14 +48,14 @@
 
 int main(int argc, char **argv)
 {
-    rawr_pa_setup();
+    rawr_Audio_Setup();
     rawr_term_setup();
 
     mn_thread_sleep_ms(50);
 
-    rawr_term_set_input_name(rawr_pa_dev_name(rawr_pa_dev_default_input()));
+    rawr_term_set_input_name(rawr_AudioDevice_Name(rawr_AudioDevice_DefaultInput()));
     rawr_term_set_input_level(0.0);
-    rawr_term_set_output_name(rawr_pa_dev_name(rawr_pa_dev_default_output()));
+    rawr_term_set_output_name(rawr_AudioDevice_Name(rawr_AudioDevice_DefaultOutput()));
     rawr_term_set_output_level(0.0);
 
     PaStreamParameters inputParameters, outputParameters;
@@ -160,7 +159,7 @@ int main(int argc, char **argv)
     }
 
     rawr_term_cleanup();
-    rawr_pa_cleanup();
+    rawr_Audio_Cleanup();
 
     return 0;
 
@@ -172,7 +171,7 @@ xrun:
         Pa_CloseStream(stream);
     }
     free(sampleBlock);
-    Pa_Terminate();
+    rawr_Audio_Cleanup();
     if (err & paInputOverflow)
         fprintf(stderr, "Input Overflow.\n");
     if (err & paOutputUnderflow)
@@ -185,7 +184,7 @@ error2:
         Pa_AbortStream(stream);
         Pa_CloseStream(stream);
     }
-    Pa_Terminate();
+    rawr_Audio_Cleanup();
     fprintf(stderr, "An error occurred while using the portaudio stream\n");
     fprintf(stderr, "Error number: %d\n", err);
     fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(err));

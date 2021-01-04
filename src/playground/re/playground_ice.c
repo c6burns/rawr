@@ -756,10 +756,12 @@ static int session_alloc(struct mnat_sess **sessp, const struct mnat *mnat, stru
     }
 
 out:
-    if (err)
+    if (err) {
+        mn_log_error("error");
         mem_deref(sess);
-    else
+    } else {
         *sessp = sess;
+    }
 
     return err;
 }
@@ -1180,13 +1182,19 @@ static void rtp_handler(const struct sa *src, const struct rtp_header *hdr, stru
 
 static void handle_nat_connected(const struct sa *raddr1, const struct sa *raddr2, void *arg)
 {
-    int abc = 123;
+    mn_log_info("connected");
 }
 
 static void handle_udp_recv(const struct sa *src, struct mbuf *mb, void *arg)
 {
-    int abc = 123;
+    mn_log_info("recv: %zd bytes", mbuf_get_left(mb));
 }
+
+static void handle_udp_error(int err, void *arg)
+{
+    mn_log_error("err");
+}
+
 
 int main(void)
 {
@@ -1271,14 +1279,38 @@ int main(void)
     stunuri_set_port(&stun_server, 19302);
     struct udp_sock *sock1 = NULL, *sock2 = NULL;
 
-    udp_listen(sock1, &laddr, NULL, NULL);
-    udp_listen(sock2, &laddr, NULL, NULL);
+    err = udp_listen(&sock1, &laddr, handle_udp_recv, handle_udp_error);
+    if (err) {
+        mn_log_error("udp_listen error: %s", strerror(err));
+        goto out;
+    }
 
-    session_alloc(&sess, &mnat_ice, dnsc, AF_INET, &stun_server, "", "", re_sdp, false, gather_handler, NULL);
-    media_alloc(&media, sess, sock1, sock2, re_sdp_media, handle_nat_connected, NULL);
+    err = udp_listen(&sock2, &laddr, handle_udp_recv, handle_udp_error);
+    if (err) {
+        mn_log_error("udp_listen error: %s", strerror(err));
+        goto out;
+    }
+
+    err = session_alloc(&sess, &mnat_ice, dnsc, AF_INET, &stun_server, "", "", re_sdp, false, gather_handler, NULL);
+    if (err) {
+        mn_log_error("session_alloc error: %s", strerror(err));
+        goto out;
+    }
+
+    err = media_alloc(&media, sess, sock1, sock2, re_sdp_media, handle_nat_connected, NULL);
+    if (err) {
+        mn_log_error("media_alloc error: %s", strerror(err));
+        goto out;
+    }
+
     while (1) {
-        mn_thread_sleep_s(1);
-        update(sess);
+        mn_thread_sleep_s(5);
+
+        err = update(sess);
+        if (err) {
+            mn_log_error("update error: %s", strerror(err));
+            goto out;
+        }
     }
 
     return 0;
