@@ -37,11 +37,27 @@ typedef struct rawr_AudioDevicePriv {
     const PaDeviceInfo *deviceInfo;
 } rawr_AudioDevicePriv;
 
+typedef struct rawr_AudioDevice {
+    rawr_AudioDevicePriv *priv;
+    rawr_AudioDeviceId id;
+    rawr_AudioDeviceProps props;
+    rawr_AudioRateFlags rates;
+} rawr_AudioDevice;
+
 typedef struct rawr_AudioStreamPriv {
     PaStream *pa_stream;
     PaStreamParameters inParameters;
     PaStreamParameters outParameters;
 } rawr_AudioStreamPriv;
+
+typedef struct rawr_AudioStream {
+    rawr_AudioStreamPriv *priv;
+    rawr_AudioDevice *inDevice;
+    rawr_AudioDevice *outDevice;
+    rawr_AudioRate sampleRate;
+    int channelCount;
+    int sampleCount;
+} rawr_AudioStream;
 
 static rawr_AudioPrivate audio_priv = {0};
 

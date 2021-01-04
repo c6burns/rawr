@@ -1,7 +1,7 @@
 #ifndef RAWR_AUDIO_H
 #define RAWR_AUDIO_H
 
-#define RAWR_AUDIOSTREAM_SAMPLECOUNT_MAX 
+#define RAWR_AUDIOSTREAM_SAMPLECOUNT_MAX
 
 typedef int rawr_AudioDeviceId;
 
@@ -47,14 +47,6 @@ typedef enum rawr_AudioDeviceProps {
     rawr_AudioDeviceProps_InputStereo = 1 << 4,
 } rawr_AudioDeviceProps;
 
-typedef struct rawr_AudioDevicePriv rawr_AudioDevicePriv;
-typedef struct rawr_AudioDevice {
-    rawr_AudioDevicePriv *priv;
-    rawr_AudioDeviceId id;
-    rawr_AudioDeviceProps props;
-    rawr_AudioRateFlags rates;
-} rawr_AudioDevice;
-
 typedef enum rawr_AudioStreamStatus {
     rawr_AudioStreamStatus_New,
     rawr_AudioStreamStatus_Ready,
@@ -62,15 +54,9 @@ typedef enum rawr_AudioStreamStatus {
     rawr_AudioStreamStatus_Stopped,
 } rawr_AudioStreamStatus;
 
-typedef struct rawr_AudioStreamPriv rawr_AudioStreamPriv;
-typedef struct rawr_AudioStream {
-    rawr_AudioStreamPriv *priv;
-    rawr_AudioDevice *inDevice;
-    rawr_AudioDevice *outDevice;
-    rawr_AudioRate sampleRate;
-    int channelCount;
-    int sampleCount;
-} rawr_AudioStream;
+typedef struct rawr_AudioDevice rawr_AudioDevice;
+
+typedef struct rawr_AudioStream rawr_AudioStream;
 
 int rawr_Audio_Setup(void);
 int rawr_Audio_Cleanup(void);
