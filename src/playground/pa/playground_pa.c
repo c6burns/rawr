@@ -1,5 +1,6 @@
 #include "rawr/audio.h"
 #include "rawr/error.h"
+#include "rawr/opus.h"
 
 #include "mn/allocator.h"
 #include "mn/log.h"
@@ -75,21 +76,11 @@ int main(void)
     int out_samples;
     int ret = 0;
 
-    int bitrate = OPUS_AUTO;
-    int force_channel = 1;
-    int vbr = 1;
-    int vbr_constraint = 1;
-    int complexity = 5;
-    int max_bw = OPUS_BANDWIDTH_FULLBAND;
-    int sig = OPUS_SIGNAL_VOICE;
-    int inband_fec = 0;
-    int pkt_loss = 1;
-    int lsb_depth = 8;
-    int pred_disabled = 0;
-    int dtx = 1;
     int frame_size_ms_x2 = 40;
     int frame_size = frame_size_ms_x2 * sampling_rate / 2000;
     int frame_size_enum = OPUS_FRAMESIZE_20_MS;
+
+    rawr_Codec *decoder, *encoder;
 
     mn_log_trace("testing portaudio and opus ...");
 
@@ -121,47 +112,8 @@ int main(void)
     RAWR_GUARD_NULL_CLEANUP(inbuf = MN_MEM_ACQUIRE(sizeof(*inbuf) * frame_size));
     RAWR_GUARD_NULL_CLEANUP(outbuf = MN_MEM_ACQUIRE(sizeof(*outbuf) * frame_size));
 
-    dec = opus_decoder_create(sampling_rate, num_channels, &err);
-    RAWR_GUARD_CLEANUP(err != OPUS_OK || dec == NULL);
-
-    enc = opus_encoder_create(sampling_rate, num_channels, application, &err);
-    RAWR_GUARD_CLEANUP(err != OPUS_OK || enc == NULL);
-
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_BITRATE(bitrate)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_FORCE_CHANNELS(force_channel)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_VBR(vbr)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_VBR_CONSTRAINT(vbr_constraint)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY(complexity)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_MAX_BANDWIDTH(max_bw)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_SIGNAL(sig)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_INBAND_FEC(inband_fec)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_PACKET_LOSS_PERC(pkt_loss)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_LSB_DEPTH(lsb_depth)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_PREDICTION_DISABLED(pred_disabled)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_DTX(dtx)) != OPUS_OK);
-    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_EXPERT_FRAME_DURATION(frame_size_enum)) != OPUS_OK);
-
-    mn_log_info("encoder_settings: %d kHz, %d ch, application: %d, "
-                "%d bps, force ch: %d, vbr: %d, vbr constraint: %d, complexity: %d, "
-                "max bw: %d, signal: %d, inband fec: %d, pkt loss: %d%%, lsb depth: %d, "
-                "pred disabled: %d, dtx: %d, (%d/2) ms\n",
-        sampling_rate / 1000,
-        num_channels,
-        application,
-        bitrate,
-        force_channel,
-        vbr,
-        vbr_constraint,
-        complexity,
-        max_bw,
-        sig,
-        inband_fec,
-        pkt_loss,
-        lsb_depth,
-        pred_disabled,
-        dtx,
-        frame_size_ms_x2);
-
+    RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&encoder, rawr_CodecType_Encoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
+    RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&decoder, rawr_CodecType_Decoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
 
     RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(stream));
     mn_log_trace("Talk (or whatever) for %d seconds.", NUM_SECONDS);
@@ -169,19 +121,20 @@ int main(void)
     for (i = 0; i < (NUM_SECONDS * SAMPLE_RATE) / FRAMES_PER_BUFFER; ++i) {
         RAWR_GUARD_CLEANUP(rawr_AudioStream_Read(stream, sampleBlock));
 
-        /* encode data here, and then ... decode for sanity check */
+        /* encode data here, and then ... */
         samp_count = 0;
-        len = opus_encode(enc, (opus_int16 *)sampleBlock, frame_size, packet, MAX_PACKET);
-        RAWR_GUARD_CLEANUP(len < 0 || len > MAX_PACKET);
+        len = rawr_Codec_Encode(encoder, sampleBlock, packet);
 
         /* decode data here for sanity check */
-        out_samples = opus_decode(dec, packet, len, outbuf, MAX_FRAME_SAMP, 0);
-        RAWR_GUARD_CLEANUP(out_samples != frame_size);
-        samp_count += frame_size;
+        out_samples = rawr_Codec_Decode(decoder, packet, len, outbuf);
+        samp_count += out_samples;
 
         RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(stream, sampleBlock));
     }
     mn_log_trace("Wire off.");
+
+    rawr_Codec_Cleanup(encoder);
+    rawr_Codec_Cleanup(decoder);
 
     RAWR_GUARD_CLEANUP(rawr_AudioStream_Stop(stream));
 

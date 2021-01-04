@@ -55,10 +55,12 @@ int rawr_Codec_Setup(rawr_Codec **out_codec, rawr_CodecType type, rawr_CodecRate
     rawr_Codec *codec = NULL;
     rawr_CodecPriv *priv = NULL;
 
-    RAWR_GUARD_NULL(*out_codec = MN_MEM_ACQUIRE(sizeof(**out_codec)));
+    RAWR_GUARD_NULL(codec = MN_MEM_ACQUIRE(sizeof(**out_codec)));
     *out_codec = codec;
+    codec->type = type;
+    codec->sampleRate = sampleRate;
     codec->frameSize = rawr_Codec_FrameSize(sampleRate, timing);
-    codec->frameSizeCode = rawr_Codec_FrameSize(sampleRate, timing);
+    codec->frameSizeCode = rawr_Codec_FrameSizeCode(sampleRate, codec->frameSize);
     
     RAWR_GUARD_NULL(priv = MN_MEM_ACQUIRE(sizeof(*priv)));
     (*out_codec)->priv = priv;
@@ -81,7 +83,7 @@ int rawr_Codec_Setup(rawr_Codec **out_codec, rawr_CodecType type, rawr_CodecRate
         RAWR_GUARD_CLEANUP(opus_encoder_ctl(priv->opus_enc, OPUS_SET_LSB_DEPTH(codecConfig.lsb_depth)) != OPUS_OK);
         RAWR_GUARD_CLEANUP(opus_encoder_ctl(priv->opus_enc, OPUS_SET_PREDICTION_DISABLED(codecConfig.pred_disabled)) != OPUS_OK);
         RAWR_GUARD_CLEANUP(opus_encoder_ctl(priv->opus_enc, OPUS_SET_DTX(codecConfig.dtx)) != OPUS_OK);
-        RAWR_GUARD_CLEANUP(opus_encoder_ctl(priv->opus_enc, OPUS_SET_EXPERT_FRAME_DURATION(codec->frameSizeCode) != OPUS_OK));
+        RAWR_GUARD_CLEANUP(opus_encoder_ctl(priv->opus_enc, OPUS_SET_EXPERT_FRAME_DURATION(codec->frameSizeCode)) != OPUS_OK);
 
         return rawr_Success;
     } else if (codec->type == rawr_CodecType_Decoder) {
@@ -98,9 +100,16 @@ cleanup:
 }
 
 // --------------------------------------------------------------------------------------------------------------
-int rawr_Codec_Cleanup(rawr_Codec *codec)
+void rawr_Codec_Cleanup(rawr_Codec *codec)
 {
     RAWR_ASSERT(codec);
+
+    rawr_CodecPriv *priv = rawr_Codec_Priv(codec);
+    RAWR_ASSERT(priv);
+
+    if (priv->opus_dec) opus_decoder_destroy(priv->opus_dec);
+    if (priv->opus_enc) opus_encoder_destroy(priv->opus_enc);
+
     MN_MEM_RELEASE(codec->priv);
     MN_MEM_RELEASE(codec);
 }
@@ -125,7 +134,7 @@ int rawr_Codec_Decode(rawr_Codec *codec, void *inBuffer, int byteLen, void *outB
     RAWR_ASSERT(codec);
 
     rawr_CodecPriv *priv = rawr_Codec_Priv(codec);
-    RAWR_ASSERT(priv && priv->opus_enc);
+    RAWR_ASSERT(priv && priv->opus_dec);
 
     int out_samples = opus_decode(priv->opus_dec, inBuffer, byteLen, outBuffer, RAWR_CODEC_INPUT_BYTES_MAX, codecConfig.inband_fec);
     RAWR_ASSERT(out_samples == codec->frameSize);

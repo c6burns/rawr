@@ -48,8 +48,8 @@ typedef struct rawr_CodecConfig {
 } rawr_CodecConfig;
 
 int rawr_Codec_Setup(rawr_Codec **out_codec, rawr_CodecType type, rawr_CodecRate rate, rawr_CodecTiming time);
-int rawr_Codec_Cleanup(rawr_Codec *codec);
-int rawr_Codec_Process(rawr_Codec *codec, void *inBuffer, void *outBuffer);
+void rawr_Codec_Cleanup(rawr_Codec *codec);
+
 int rawr_Codec_Encode(rawr_Codec *codec, void *inBuffer, void *outBuffer);
 int rawr_Codec_Decode(rawr_Codec *codec, void *inBuffer, int byteLen, void *outBuffer);
 
