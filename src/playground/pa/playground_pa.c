@@ -49,31 +49,7 @@
 #    define PRINTF_S_FORMAT "%d"
 #endif
 
-int get_frame_size_enum(int frame_size, int sampling_rate)
-{
-    int frame_size_enum;
 
-    if (frame_size == sampling_rate / 400)
-        frame_size_enum = OPUS_FRAMESIZE_2_5_MS;
-    else if (frame_size == sampling_rate / 200)
-        frame_size_enum = OPUS_FRAMESIZE_5_MS;
-    else if (frame_size == sampling_rate / 100)
-        frame_size_enum = OPUS_FRAMESIZE_10_MS;
-    else if (frame_size == sampling_rate / 50)
-        frame_size_enum = OPUS_FRAMESIZE_20_MS;
-    else if (frame_size == sampling_rate / 25)
-        frame_size_enum = OPUS_FRAMESIZE_40_MS;
-    else if (frame_size == 3 * sampling_rate / 50)
-        frame_size_enum = OPUS_FRAMESIZE_60_MS;
-    else if (frame_size == 4 * sampling_rate / 50)
-        frame_size_enum = OPUS_FRAMESIZE_80_MS;
-    else if (frame_size == 5 * sampling_rate / 50)
-        frame_size_enum = OPUS_FRAMESIZE_100_MS;
-    else if (frame_size == 6 * sampling_rate / 50)
-        frame_size_enum = OPUS_FRAMESIZE_120_MS;
-
-    return frame_size_enum;
-}
 
 int main(void)
 {
@@ -113,8 +89,7 @@ int main(void)
     int dtx = 1;
     int frame_size_ms_x2 = 40;
     int frame_size = frame_size_ms_x2 * sampling_rate / 2000;
-    int frame_size_enum = get_frame_size_enum(frame_size, sampling_rate);
-    force_channel = 1;
+    int frame_size_enum = OPUS_FRAMESIZE_20_MS;
 
     mn_log_trace("testing portaudio and opus ...");
 
