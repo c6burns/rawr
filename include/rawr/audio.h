@@ -1,5 +1,5 @@
-#ifndef RAWR_PA_H
-#define RAWR_PA_H
+#ifndef RAWR_AUDIO_H
+#define RAWR_AUDIO_H
 
 #define RAWR_AUDIOSTREAM_SAMPLECOUNT_MAX 
 
