@@ -1,5 +1,3 @@
-#include "rawr/pa.h"
-
 #include "mn/log.h"
 #include "portaudio.h"
 

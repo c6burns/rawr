@@ -409,7 +409,7 @@ int main(void)
         data.file = fopen(FILE_NAME, "rb");
         if (data.file != 0) {
             /* Start the file reading thread */
-            err = startThread(&data, threadFunctionReadFromRawFile);
+            err = startThread(&data, threadFunctionReadFromRing);
             if (err != paNoError) goto done;
 
             err = Pa_StartStream(stream);

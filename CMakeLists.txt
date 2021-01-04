@@ -189,12 +189,12 @@ endmacro()
 rawr_add_library(rawr
 	include/rawr/app.h
 	include/rawr/buf.h
-	include/rawr/pa.h
+	include/rawr/audio.h
     include/rawr/ring.h
 	include/rawr/term.h
 	src/app.c
 	src/buf.c
-	src/pa.c
+	src/audio.c
     src/ring.c
 	src/term.c
 )

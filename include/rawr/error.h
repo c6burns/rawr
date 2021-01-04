@@ -24,4 +24,9 @@
 #define RAWR_GUARD_CLEANUP(expr) RAWR_GUARD_GOTO(cleanup, expr)
 #define RAWR_GUARD_NULL_CLEANUP(expr) RAWR_GUARD_GOTO(cleanup, !(expr))
 
+typedef enum rawr_Error {
+    rawr_Success = 0,
+    /* TODO: centralize error definitions here */
+} rawr_Error;
+
 #endif
