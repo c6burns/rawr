@@ -1,3 +1,7 @@
+#include "rawr/audio.h"
+#include "rawr/error.h"
+
+#include "mn/allocator.h"
 #include "mn/log.h"
 #include "portaudio.h"
 
@@ -73,31 +77,25 @@ int get_frame_size_enum(int frame_size, int sampling_rate)
 
 int main(void)
 {
-    mn_log_trace("testing portaudio ...");
-
-    PaStreamParameters inputParameters, outputParameters;
-    PaStream *stream = NULL;
-    PaError err;
-    const PaDeviceInfo *inputInfo;
-    const PaDeviceInfo *outputInfo;
     char *sampleBlock = NULL;
     int i;
     int numBytes;
-    int numChannels;
+    int numChannels = 1;
 
     OpusEncoder *enc;
     OpusDecoder *dec;
     int j;
+    int err;
 
     int sampling_rate = 48000;
     int num_channels = 1;
     int application = OPUS_APPLICATION_VOIP;
 
     int samp_count = 0;
-    opus_int16 *inbuf;
+    opus_int16 *inbuf = NULL;
     unsigned char packet[MAX_PACKET + 257];
     int len;
-    opus_int16 *outbuf;
+    opus_int16 *outbuf = NULL;
     int out_samples;
     int ret = 0;
 
@@ -118,91 +116,55 @@ int main(void)
     int frame_size_enum = get_frame_size_enum(frame_size, sampling_rate);
     force_channel = 1;
 
-    /* Generate input data */
-    inbuf = (opus_int16 *)malloc(sizeof(*inbuf) * SSAMPLES);
-    //generate_music(inbuf, SSAMPLES / 2);
+    mn_log_trace("testing portaudio and opus ...");
 
-    /* Allocate memory for output data */
-    outbuf = (opus_int16 *)malloc(sizeof(*outbuf) * MAX_FRAME_SAMP * 3);
+    rawr_Audio_Setup();
 
-    mn_log_trace("patest_read_write_wire.c");
-    mn_log_trace("sizeof(int) = %lu", sizeof(int));
-    mn_log_trace("sizeof(long) = %lu", sizeof(long));
+    rawr_AudioDevice *inDevice = rawr_AudioDevice_DefaultInput();
+    rawr_AudioDevice *outDevice = rawr_AudioDevice_DefaultOutput();
 
-    err = Pa_Initialize();
-    if (err != paNoError) goto error2;
+    mn_log_info(" input: %d - %s", rawr_AudioDevice_Id(inDevice), rawr_AudioDevice_Name(inDevice));
+    mn_log_info("output: %d - %s", rawr_AudioDevice_Id(outDevice), rawr_AudioDevice_Name(outDevice));
 
-    inputParameters.device = Pa_GetDefaultInputDevice(); /* default input device */
-    mn_log_trace("Input device # %d.", inputParameters.device);
-    inputInfo = Pa_GetDeviceInfo(inputParameters.device);
-    mn_log_trace("    Name: %s", inputInfo->name);
-    mn_log_trace("      LL: %g s", inputInfo->defaultLowInputLatency);
-    mn_log_trace("      HL: %g s", inputInfo->defaultHighInputLatency);
+    rawr_AudioStream *stream = NULL;
+    if (rawr_AudioStream_Setup(&stream, rawr_AudioRate_48000, 1, frame_size)) {
+        mn_log_error("rawr_AudioStream_Setup failed");
+    }
 
-    outputParameters.device = Pa_GetDefaultOutputDevice(); /* default output device */
-    mn_log_trace("Output device # %d.", outputParameters.device);
-    outputInfo = Pa_GetDeviceInfo(outputParameters.device);
-    mn_log_trace("   Name: %s", outputInfo->name);
-    mn_log_trace("     LL: %g s", outputInfo->defaultLowOutputLatency);
-    mn_log_trace("     HL: %g s", outputInfo->defaultHighOutputLatency);
+    if (rawr_AudioStream_AddDevice(stream, inDevice)) {
+        mn_log_error("rawr_AudioStream_AddDevice failed on input");
+    }
 
-    numChannels = inputInfo->maxInputChannels < outputInfo->maxOutputChannels
-                      ? inputInfo->maxInputChannels
-                      : outputInfo->maxOutputChannels;
-    numChannels = 1;
-    mn_log_trace("Num channels = %d.", numChannels);
-
-    inputParameters.channelCount = numChannels;
-    inputParameters.sampleFormat = PA_SAMPLE_TYPE;
-    inputParameters.suggestedLatency = inputInfo->defaultHighInputLatency;
-    inputParameters.hostApiSpecificStreamInfo = NULL;
-
-    outputParameters.channelCount = numChannels;
-    outputParameters.sampleFormat = PA_SAMPLE_TYPE;
-    outputParameters.suggestedLatency = outputInfo->defaultHighOutputLatency;
-    outputParameters.hostApiSpecificStreamInfo = NULL;
-
-    /* -- setup -- */
-
-    err = Pa_OpenStream(
-        &stream,
-        &inputParameters,
-        &outputParameters,
-        SAMPLE_RATE,
-        frame_size,
-        paClipOff, /* we won't output out of range samples so don't bother clipping them */
-        NULL,      /* no callback, use blocking API */
-        NULL);     /* no callback, so no callback userData */
-    if (err != paNoError) goto error2;
+    if (rawr_AudioStream_AddDevice(stream, outDevice)) {
+        mn_log_error("rawr_AudioStream_AddDevice failed on output");
+    }
 
     numBytes = FRAMES_PER_BUFFER * numChannels * SAMPLE_SIZE;
-    sampleBlock = (char *)malloc(numBytes);
-    if (sampleBlock == NULL) {
-        mn_log_trace("Could not allocate record array.");
-        goto error1;
-    }
+    RAWR_GUARD_NULL_CLEANUP(sampleBlock = MN_MEM_ACQUIRE(numBytes));
     memset(sampleBlock, SAMPLE_SILENCE, numBytes);
 
+    RAWR_GUARD_NULL_CLEANUP(inbuf = MN_MEM_ACQUIRE(sizeof(*inbuf) * frame_size));
+    RAWR_GUARD_NULL_CLEANUP(outbuf = MN_MEM_ACQUIRE(sizeof(*outbuf) * frame_size));
 
     dec = opus_decoder_create(sampling_rate, num_channels, &err);
-    if (err != OPUS_OK || dec == NULL) return -1;
+    RAWR_GUARD_CLEANUP(err != OPUS_OK || dec == NULL);
 
     enc = opus_encoder_create(sampling_rate, num_channels, application, &err);
-    if (err != OPUS_OK || enc == NULL) return -1;
+    RAWR_GUARD_CLEANUP(err != OPUS_OK || enc == NULL);
 
-    if (opus_encoder_ctl(enc, OPUS_SET_BITRATE(bitrate)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_FORCE_CHANNELS(force_channel)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_VBR(vbr)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_VBR_CONSTRAINT(vbr_constraint)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY(complexity)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_MAX_BANDWIDTH(max_bw)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_SIGNAL(sig)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_INBAND_FEC(inband_fec)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_PACKET_LOSS_PERC(pkt_loss)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_LSB_DEPTH(lsb_depth)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_PREDICTION_DISABLED(pred_disabled)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_DTX(dtx)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(enc, OPUS_SET_EXPERT_FRAME_DURATION(frame_size_enum)) != OPUS_OK) goto cleanup;
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_BITRATE(bitrate)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_FORCE_CHANNELS(force_channel)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_VBR(vbr)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_VBR_CONSTRAINT(vbr_constraint)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY(complexity)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_MAX_BANDWIDTH(max_bw)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_SIGNAL(sig)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_INBAND_FEC(inband_fec)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_PACKET_LOSS_PERC(pkt_loss)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_LSB_DEPTH(lsb_depth)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_PREDICTION_DISABLED(pred_disabled)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_DTX(dtx)) != OPUS_OK);
+    RAWR_GUARD_CLEANUP(opus_encoder_ctl(enc, OPUS_SET_EXPERT_FRAME_DURATION(frame_size_enum)) != OPUS_OK);
 
     mn_log_info("encoder_settings: %d kHz, %d ch, application: %d, "
                 "%d bps, force ch: %d, vbr: %d, vbr constraint: %d, complexity: %d, "
@@ -226,87 +188,41 @@ int main(void)
         frame_size_ms_x2);
 
 
-    err = Pa_StartStream(stream);
-    if (err != paNoError) goto error1;
-    mn_log_trace("Wire on. Will run %d seconds.", NUM_SECONDS);
-
-     // You may get underruns or overruns if the output is not primed by PortAudio.
-    for (int primer = 0; primer < 4; primer++) {
-        err = Pa_WriteStream(stream, sampleBlock, FRAMES_PER_BUFFER);
-        if (err) goto xrun;
-    }
+    RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(stream));
+    mn_log_trace("Talk (or whatever) for %d seconds.", NUM_SECONDS);
 
     for (i = 0; i < (NUM_SECONDS * SAMPLE_RATE) / FRAMES_PER_BUFFER; ++i) {
-        err = Pa_ReadStream(stream, sampleBlock, FRAMES_PER_BUFFER);
-        if (err) goto xrun;
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Read(stream, sampleBlock));
 
-        /* Encode data, then decode for sanity check */
+        /* encode data here, and then ... decode for sanity check */
         samp_count = 0;
         len = opus_encode(enc, (opus_int16 *)sampleBlock, frame_size, packet, MAX_PACKET);
-        if (len < 0 || len > MAX_PACKET) {
-            mn_log_error("opus_encode() returned %d", len);
-            ret = -1;
-            break;
-        }
+        RAWR_GUARD_CLEANUP(len < 0 || len > MAX_PACKET);
 
+        /* decode data here for sanity check */
         out_samples = opus_decode(dec, packet, len, outbuf, MAX_FRAME_SAMP, 0);
-        if (out_samples != frame_size) {
-            mn_log_error("opus_decode() returned %d", out_samples);
-            ret = -1;
-            break;
-        }
+        RAWR_GUARD_CLEANUP(out_samples != frame_size);
         samp_count += frame_size;
 
-         // You may get underruns or overruns if the output is not primed by PortAudio.
-        err = Pa_WriteStream(stream, outbuf, FRAMES_PER_BUFFER);
-        if (err) goto xrun;
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(stream, sampleBlock));
     }
     mn_log_trace("Wire off.");
 
-    err = Pa_StopStream(stream);
-    if (err != paNoError) goto error1;
+    RAWR_GUARD_CLEANUP(rawr_AudioStream_Stop(stream));
 
-    free(inbuf);
-    free(outbuf);
+    RAWR_GUARD_CLEANUP(rawr_AudioStream_Cleanup(stream));
 
-    free(sampleBlock);
+    MN_MEM_RELEASE(inbuf);
+    MN_MEM_RELEASE(outbuf);
+    MN_MEM_RELEASE(sampleBlock);
 
-    Pa_Terminate();
-    return 0;
+    RAWR_GUARD_CLEANUP(rawr_Audio_Cleanup());
+
+    return rawr_Success;
 
 cleanup:
 
-    mn_log_error("FAIL!");
+    mn_log_error("FAILED!");
 
-    if (inbuf) free(inbuf);
-    if (outbuf) free(outbuf);
-
-    opus_encoder_destroy(enc);
-    opus_decoder_destroy(dec);
-
-xrun:
-    mn_log_trace("err = %d", err);
-    if (stream) {
-        Pa_AbortStream(stream);
-        Pa_CloseStream(stream);
-    }
-    free(sampleBlock);
-    Pa_Terminate();
-    if (err & paInputOverflow)
-        mn_log_error("Input Overflow.");
-    if (err & paOutputUnderflow)
-        mn_log_error("Output Underflow.");
-    return -2;
-error1:
-    free(sampleBlock);
-error2:
-    if (stream) {
-        Pa_AbortStream(stream);
-        Pa_CloseStream(stream);
-    }
-    Pa_Terminate();
-    mn_log_error("An error occurred while using the portaudio stream");
-    mn_log_error("Error number: %d", err);
-    mn_log_error("Error message: %s", Pa_GetErrorText(err));
-    return -1;
+    return rawr_Error;
 }

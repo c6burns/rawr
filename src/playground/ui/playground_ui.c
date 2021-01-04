@@ -53,9 +53,9 @@ int main(int argc, char **argv)
 
     mn_thread_sleep_ms(50);
 
-    rawr_term_set_input_name(rawr_AudioDevice_GetName(rawr_AudioDevice_GetDefaultInput()));
+    rawr_term_set_input_name(rawr_AudioDevice_Name(rawr_AudioDevice_DefaultInput()));
     rawr_term_set_input_level(0.0);
-    rawr_term_set_output_name(rawr_AudioDevice_GetName(rawr_AudioDevice_GetDefaultOutput()));
+    rawr_term_set_output_name(rawr_AudioDevice_Name(rawr_AudioDevice_DefaultOutput()));
     rawr_term_set_output_level(0.0);
 
     PaStreamParameters inputParameters, outputParameters;
