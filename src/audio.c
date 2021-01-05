@@ -363,8 +363,10 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream)
     errCode = -2;
     RAWR_GUARD_CLEANUP(Pa_StartStream(priv->pa_stream));
 
-    errCode = -3;
-    RAWR_GUARD_CLEANUP(Pa_WriteStream(priv->pa_stream, silenceBuffer, stream->sampleCount));
+    if (stream->outDevice) {
+        errCode = -3;
+        RAWR_GUARD_CLEANUP(Pa_WriteStream(priv->pa_stream, silenceBuffer, stream->sampleCount));
+    }
 
     MN_MEM_RELEASE(silenceBuffer);
     return rawr_Success;

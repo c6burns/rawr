@@ -55,25 +55,17 @@
 int main(void)
 {
     char *sampleBlock = NULL;
-    int i;
     int numBytes;
     int numChannels = 1;
-
-    OpusEncoder *enc;
-    OpusDecoder *dec;
-    int j;
     int err;
 
     int sampling_rate = 48000;
     int num_channels = 1;
-    int application = OPUS_APPLICATION_VOIP;
-
     int samp_count = 0;
     opus_int16 *inbuf = NULL;
     unsigned char packet[MAX_PACKET + 257];
     int len;
     opus_int16 *outbuf = NULL;
-    int out_samples;
     int ret = 0;
 
     int frame_size_ms_x2 = 40;
@@ -118,16 +110,14 @@ int main(void)
     RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(stream));
     mn_log_trace("Talk (or whatever) for %d seconds.", NUM_SECONDS);
 
-    for (i = 0; i < (NUM_SECONDS * SAMPLE_RATE) / FRAMES_PER_BUFFER; ++i) {
+    for (int i = 0; i < (NUM_SECONDS * SAMPLE_RATE) / FRAMES_PER_BUFFER; ++i) {
         RAWR_GUARD_CLEANUP(rawr_AudioStream_Read(stream, sampleBlock));
 
         /* encode data here, and then ... */
-        samp_count = 0;
         len = rawr_Codec_Encode(encoder, sampleBlock, packet);
 
         /* decode data here for sanity check */
-        out_samples = rawr_Codec_Decode(decoder, packet, len, outbuf);
-        samp_count += out_samples;
+        RAWR_GUARD_CLEANUP(rawr_Codec_Decode(decoder, packet, len, outbuf) < 0);
 
         RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(stream, sampleBlock));
     }
