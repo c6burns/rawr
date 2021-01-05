@@ -1,3 +1,6 @@
+#include "rawr/error.h"
+#include "rawr/endpoint.h"
+
 #include "re.h"
 
 #include "mn/atomic.h"
@@ -7,7 +10,6 @@
 #include "mn/time.h"
 #include "playground_srtp.h"
 
-#include "juice/juice.h"
 #include "opus.h"
 #include "portaudio.h"
 #include "srtp.h"
@@ -71,9 +73,6 @@ opus_int16 *opus_outbuf;
 int opus_frame_size;
 
 uint64_t rtp_bytes_sent, rtp_wait_ns, rtp_tstamp_last;
-
-static juice_agent_t *juice_agent;
-mn_atomic_t juice_complete = MN_ATOMIC_INIT(0);
 
 void rtp_session_run_sip_sendrecv(void *arg)
 {
@@ -655,58 +654,6 @@ static void signal_handler(int sig)
     terminate();
 }
 
-static void on_juice_state_changed(juice_agent_t *agent, juice_state_t state, void *user_ptr)
-{
-    printf("State 1: %s\n", juice_state_to_string(state));
-
-    if (state == JUICE_STATE_CONNECTED) {
-        // Agent 1: on connected, send a message
-        const char *message = "Hello from 1";
-        juice_send(agent, message, strlen(message));
-    }
-}
-
-static void on_juice_candidate(juice_agent_t *agent, const char *sdp, void *user_ptr)
-{
-    mn_log_info("juice candidate: %s", sdp);
-
-    const char *split = " ";
-    char *token;
-    char *sdp_str = strdup(sdp);
-    int i = 0;
-
-    char *ext_ip = NULL;
-
-    token = strtok(sdp_str, split);
-    while (token) {
-        mn_log_debug("%d: %s", i, token);
-
-        if (i == 4) {
-            ext_ip = strdup(token);
-        } else if (i == 7) {
-            if (strcmp(token, "srflx")) {
-                ext_ip = NULL;
-            }
-            break;
-        }
-
-        token = strtok(NULL, split);
-        i++;
-    }
-
-    if (ext_ip) {
-        mn_log_warning("FOUND EXTERNAL IP: %s", ext_ip);
-        re_ext_ip = ext_ip;
-    }
-}
-
-static void on_juice_gathering_done(juice_agent_t *agent, void *user_ptr)
-{
-    mn_log_info("juice gathering done");
-    juice_set_remote_gathering_done(agent);
-    mn_atomic_store(&juice_complete, 1);
-}
-
 int main(int argc, char *argv[])
 {
     struct sa nsv[16];
@@ -718,57 +665,12 @@ int main(int argc, char *argv[])
     srtp_err_status_t status;
     int ret;
 
+    rawr_Endpoint epStunServ, epExternal;
+
     mn_log_setup();
-
-    juice_set_log_level(JUICE_LOG_LEVEL_NONE);
-    juice_config_t config1;
-    memset(&config1, 0, sizeof(config1));
-    config1.stun_server_host = "stun.l.google.com";
-    config1.stun_server_port = 19302;
-    config1.cb_state_changed = on_juice_state_changed;
-    config1.cb_candidate = on_juice_candidate;
-    config1.cb_gathering_done = on_juice_gathering_done;
-    config1.cb_recv = NULL;
-    config1.user_ptr = NULL;
-
-    juice_agent = juice_create(&config1);
-
-    char sdp1[JUICE_MAX_SDP_STRING_LEN];
-    juice_get_local_description(juice_agent, sdp1, JUICE_MAX_SDP_STRING_LEN);
-    printf("Local description 1:\n%s\n", sdp1);
-
-    // Agent 2: Receive description from agent 1
-    //juice_set_remote_description(agent2, sdp1);
-
-    // Agent 2: Generate local description
-    char sdp2[JUICE_MAX_SDP_STRING_LEN];
-    //juice_get_local_description(agent2, sdp2, JUICE_MAX_SDP_STRING_LEN);
-    //printf("Local description 2:\n%s\n", sdp2);
-
-    // Agent 1: Receive description from agent 2
-    juice_set_remote_description(juice_agent, sdp2);
-
-    // Agent 1: Gather candidates (and send them to agent 2)
-    juice_gather_candidates(juice_agent);
-
-    while (!mn_atomic_load(&juice_complete)) {
-        mn_thread_sleep_ms(5);
-    }
-
 
     err = Pa_Initialize();
     if (err != paNoError) return -1;
-
-#ifdef RTPW_USE_WINSOCK2
-    WORD wVersionRequested = MAKEWORD(2, 0);
-    WSADATA wsaData;
-
-    ret = WSAStartup(wVersionRequested, &wsaData);
-    if (ret != 0) {
-        mn_log_error("error: WSAStartup() failed: %d", ret);
-        exit(1);
-    }
-#endif
 
     mn_log_trace("Using %s [0x%x]", srtp_get_version_string(), srtp_get_version());
 
@@ -784,12 +686,18 @@ int main(int argc, char *argv[])
     /* enable coredumps to aid debugging */
     (void)sys_coredump_set(true);
 
-    /* initialize libre state */
-    err = libre_init();
-    if (err) {
-        re_fprintf(stderr, "re init failed: %s\n", strerror(err));
-        goto out;
-    }
+    RAWR_GUARD_CLEANUP(libre_init());
+
+
+    rawr_Endpoint_SetBytes(&epStunServ, 74, 125, 197, 127, 19302);
+
+    rawr_StunClient_BindingRequest(&epStunServ, &epExternal);
+
+    char ipstr[255];
+    uint16_t port;
+    rawr_Endpoint_String(&epExternal, &port, ipstr, 255);
+    mn_log_info("Found external IP via STUN: %s", ipstr);
+
 
     nsc = ARRAY_SIZE(nsv);
 
@@ -797,32 +705,32 @@ int main(int argc, char *argv[])
     err = dns_srv_get(NULL, 0, nsv, &nsc);
     if (err) {
         re_fprintf(stderr, "unable to get dns servers: %s\n", strerror(err));
-        goto out;
+        goto cleanup;
     }
 
     /* create DNS client */
     err = dnsc_alloc(&dnsc, NULL, nsv, nsc);
     if (err) {
         re_fprintf(stderr, "unable to create dns client: %s\n", strerror(err));
-        goto out;
+        goto cleanup;
     }
 
     /* create SIP stack instance */
     err = sip_alloc(&re_sip, dnsc, 32, 32, 32, "RAWR v0.9.1", exit_handler, NULL);
     if (err) {
         re_fprintf(stderr, "sip error: %s\n", strerror(err));
-        goto out;
+        goto cleanup;
     }
 
     /* fetch local IP address */
     err = net_default_source_addr_get(AF_INET, &laddr);
     if (err) {
         re_fprintf(stderr, "local address error: %s\n", strerror(err));
-        goto out;
+        goto cleanup;
     }
 
     /* TODO: grab our external IP here using STUN */
-    sa_set_str(&ext_addr, re_ext_ip, 0);
+    sa_set_sa(&ext_addr, rawr_Endpoint_SockAddr(&epExternal));
     sa_set_port(&laddr, 0);
 
     /* add supported SIP transports */
@@ -830,14 +738,14 @@ int main(int argc, char *argv[])
     //err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
     if (err) {
         re_fprintf(stderr, "transport error: %s\n", strerror(err));
-        goto out;
+        goto cleanup;
     }
 
     /* create SIP session socket */
     err = sipsess_listen(&re_sess_sock, re_sip, 32, connect_handler, NULL);
     if (err) {
         re_fprintf(stderr, "session listen error: %s\n", strerror(err));
-        goto out;
+        goto cleanup;
     }
 
     /* create the RTP/RTCP socket */
@@ -845,7 +753,7 @@ int main(int argc, char *argv[])
     err = rtp_listen(&re_rtp, IPPROTO_UDP, &laddr, 16384, 32767, true, rtp_handler, rtcp_handler, NULL);
     if (err) {
         re_fprintf(stderr, "rtp listen error: %m\n", err);
-        goto out;
+        goto cleanup;
     }
     re_local_port = sa_port(rtp_local(re_rtp));
     re_printf("local RTP port is %u\n", sa_port(rtp_local(re_rtp)));
@@ -855,29 +763,29 @@ int main(int argc, char *argv[])
     err = sdp_session_alloc(&re_sdp, &laddr);
     if (err) {
         re_fprintf(stderr, "sdp session error: %s\n", strerror(err));
-        goto out;
+        goto cleanup;
     }
 
     /* add audio sdp media, using port from RTP socket */
     err = sdp_media_add(&re_sdp_media, re_sdp, "audio", sa_port(rtp_local(re_rtp)), "RTP/AVP");
     if (err) {
         re_fprintf(stderr, "sdp media error: %s\n", strerror(err));
-        goto out;
+        goto cleanup;
     }
 
     /* add opus sdp media format */
     err = sdp_format_add(NULL, re_sdp_media, false, "116", "opus", 48000, 2, NULL, NULL, NULL, false, NULL);
     if (err) {
         re_fprintf(stderr, "sdp format error: %s\n", strerror(err));
-        goto out;
+        goto cleanup;
     }
 
     /* invite provided URI */
     if (1) {
         //const char *const invite_uri = "sip:1002@sip.serverlynx.net"; // c6 cell user
-        //const char *const invite_uri = "sip:3300@sip.serverlynx.net"; // conference
+        const char *const invite_uri = "sip:3300@sip.serverlynx.net"; // conference
         //const char *const invite_uri = "sip:9195@sip.serverlynx.net"; // 5s delay echo test
-        const char *const invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
+        //const char *const invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
         //const char *const invite_uri = "sip:9197@sip.serverlynx.net"; // tone 1
         //const char *const invite_uri = "sip:9198@sip.serverlynx.net"; // tone 2
         struct mbuf *mb;
@@ -886,14 +794,14 @@ int main(int argc, char *argv[])
         err = sdp_encode(&mb, re_sdp, true);
         if (err) {
             re_fprintf(stderr, "sdp encode error: %s\n", strerror(err));
-            goto out;
+            goto cleanup;
         }
 
         err = sipsess_connect(&re_sess, re_sess_sock, invite_uri, re_name, re_uri, re_name, NULL, 0, "application/sdp", mb, auth_handler, NULL, false, offer_handler, answer_handler, progress_handler, establish_handler, NULL, NULL, close_handler, NULL, NULL);
         mem_deref(mb); /* free SDP buffer */
         if (err) {
             re_fprintf(stderr, "session connect error: %s\n", strerror(err));
-            goto out;
+            goto cleanup;
         }
 
         re_printf("inviting <%s>...\n", invite_uri);
@@ -902,7 +810,7 @@ int main(int argc, char *argv[])
         err = sipreg_register(&re_reg, re_sip, re_registrar, re_uri, NULL, re_uri, 60, re_name, NULL, 0, 0, auth_handler, NULL, false, register_handler, NULL, NULL, NULL);
         if (err) {
             re_fprintf(stderr, "register error: %s\n", strerror(err));
-            goto out;
+            goto cleanup;
         }
 
         re_printf("registering <%s>...\n", re_uri);
@@ -911,7 +819,7 @@ int main(int argc, char *argv[])
     /* main loop */
     err = re_main(signal_handler);
 
-out:
+cleanup:
     /* clean up/free all state */
     mem_deref(re_sdp); /* will also free sdp_media */
     mem_deref(re_rtp);
