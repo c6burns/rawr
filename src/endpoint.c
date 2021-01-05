@@ -4,6 +4,7 @@
 #include "rawr/platform.h"
 
 #include "aws/common/byte_order.h"
+#include "aws/common/byte_buf.h"
 
 // --------------------------------------------------------------------------------------------------------------
 uint16_t rawr_Endpoint_AF(rawr_Endpoint *endpoint)
@@ -118,18 +119,21 @@ int rawr_Endpoint_In4(rawr_Endpoint *endpoint, uint32_t *out_in4)
 
     *out_in4 = aws_ntoh32(endpoint->addr4.addr);
 
-    return;
+    return rawr_Success;
 }
 
 // --------------------------------------------------------------------------------------------------------------
-int rawr_Endpoint_SetIn4(rawr_Endpoint *endpoint, uint32_t in4)
+void rawr_Endpoint_SetIn4(rawr_Endpoint *endpoint, uint32_t in4)
 {
     RAWR_ASSERT(endpoint);
 
-    RAWR_GUARD(!rawr_Endpoint_Is4(endpoint));
+    RAWR_GUARD_CLEANUP(!rawr_Endpoint_Is4(endpoint));
 
     endpoint->addr4.addr = aws_hton32(in4);
 
+    return;
+
+cleanup:
     return;
 }
 
@@ -146,21 +150,20 @@ void rawr_Endpoint_SetPort(rawr_Endpoint *endpoint, uint16_t port)
 {
     RAWR_ASSERT(endpoint);
     endpoint->addr4.port = aws_hton16(port);
-    return endpoint->addr4.port;
 }
 
 // --------------------------------------------------------------------------------------------------------------
 int rawr_Endpoint_Is4(rawr_Endpoint *endpoint)
 {
     RAWR_ASSERT(endpoint);
-    return (rawr_Endpoint_AF(endpoint) == (uint16_t)rawr_SockAF_IPV4);
+    return (rawr_Endpoint_AF(endpoint) == (uint16_t)rawr_SockAF_IPv4);
 }
 
 // --------------------------------------------------------------------------------------------------------------
 int rawr_Endpoint_Is6(rawr_Endpoint *endpoint)
 {
     RAWR_ASSERT(endpoint);
-    return (rawr_Endpoint_AF(endpoint) == (uint16_t)rawr_SockAF_IPV6);
+    return (rawr_Endpoint_AF(endpoint) == (uint16_t)rawr_SockAF_IPv6);
 }
 
 // --------------------------------------------------------------------------------------------------------------
@@ -184,8 +187,8 @@ int rawr_Endpoint_IsEqual(rawr_Endpoint *endpoint, void *sockaddr)
         if (memcmp(endpoint, addr, sizeof(struct sockaddr_in6))) return false;
         return true;
     } else if (rawr_Endpoint_Is4(addr)) {
-        if ((rawr_Endpoint *)(sockaddr)->addr4.addr != endpoint->addr4.addr) return false;
-        if ((rawr_Endpoint *)(sockaddr)->addr4.port != endpoint->addr4.port) return false;
+        if (((rawr_Endpoint *)sockaddr)->addr4.addr != endpoint->addr4.addr) return false;
+        if (((rawr_Endpoint *)sockaddr)->addr4.port != endpoint->addr4.port) return false;
         return true;
     }
 
@@ -198,11 +201,11 @@ int rawr_Endpoint_Hash(rawr_Endpoint *endpoint, uint64_t *out_hash)
     RAWR_ASSERT(out_hash);
 
     *out_hash = 0;
-    if (endpoint->addr6.family == AF_INET6) {
+    if (rawr_Endpoint_Is4(endpoint)) {
         struct aws_byte_cursor bc = aws_byte_cursor_from_array(endpoint, sizeof(*endpoint));
         *out_hash = aws_hash_byte_cursor_ptr(&bc);
         return rawr_Success;
-    } else if (endpoint->addr4.family == AF_INET) {
+    } else if (rawr_Endpoint_Is6(endpoint)) {
         *out_hash = 0x0000000000000000ULL & endpoint->addr4.port;
         *out_hash <<= 32;
         *out_hash |= endpoint->addr4.addr;
@@ -211,5 +214,3 @@ int rawr_Endpoint_Hash(rawr_Endpoint *endpoint, uint64_t *out_hash)
 
     return rawr_Error;
 }
-
-#endif

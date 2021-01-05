@@ -190,6 +190,7 @@ rawr_add_library(rawr
 	include/rawr/app.h
 	include/rawr/buf.h
 	include/rawr/audio.h
+    include/rawr/endpoint.h
     include/rawr/opus.h
     include/rawr/ring.h
     include/rawr/stun.h
@@ -197,6 +198,7 @@ rawr_add_library(rawr
 	src/app.c
 	src/buf.c
 	src/audio.c
+    src/endpoint.c
     src/opus.c
     src/ring.c
     src/stun.c
