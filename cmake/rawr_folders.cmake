@@ -92,16 +92,10 @@ endif()
 rawr_target_folder(uv_a "deps")
 rawr_target_folder(uv "extras/libuv")
 
-# libjuice
-rawr_target_folder(juice "extras/juice")
-rawr_target_folder(juice-static "extras/juice")
-rawr_target_folder(juice-tests "extras/juice")
-
 # re
 rawr_target_folder(re "deps")
 
 # playgrounds
-rawr_target_folder(playground_juice "playgrounds")
 rawr_target_folder(playground_lws "playgrounds")
 rawr_target_folder(playground_pa "playgrounds")
 rawr_target_folder(playground_pa_callbacks "playgrounds")
@@ -112,6 +106,5 @@ rawr_target_folder(playground_srtp_sendrecv "playgrounds")
 rawr_target_folder(playground_srtp_siprecv "playgrounds")
 rawr_target_folder(playground_strophe "playgrounds")
 rawr_target_folder(playground_ui "playgrounds")
-rawr_target_folder(playground_juice "playgrounds")
 rawr_target_folder(playground_ice "playgrounds")
 rawr_target_folder(playground_stun "playgrounds")
