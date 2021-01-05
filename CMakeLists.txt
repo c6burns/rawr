@@ -192,12 +192,14 @@ rawr_add_library(rawr
 	include/rawr/audio.h
     include/rawr/opus.h
     include/rawr/ring.h
+    include/rawr/stun.h
 	include/rawr/term.h
 	src/app.c
 	src/buf.c
 	src/audio.c
     src/opus.c
     src/ring.c
+    src/stun.c
 	src/term.c
 )
 
