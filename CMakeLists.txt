@@ -309,6 +309,7 @@ endif()
 if (TARGET re)
 	rawr_add_executable(playground_re_sip src/playground/re/playground_re_sip.c)
     rawr_add_executable(playground_ice src/playground/re/playground_ice.c)
+    rawr_add_executable(playground_stun src/playground/re/playground_stun.c)
 endif()
 
 
