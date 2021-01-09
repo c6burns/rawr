@@ -641,7 +641,7 @@ int main(int argc, char *argv[])
     RAWR_GUARD_CLEANUP(libre_init());
 
 
-    rawr_Endpoint_SetBytes(&epStunServ, 74, 125, 197, 127, 19302);
+    rawr_Endpoint_SetBytes(&epStunServ, 3, 223, 157, 6, 3478);
 
     rawr_StunClient_BindingRequest(&epStunServ, &epExternal);
 
