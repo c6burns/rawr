@@ -51,11 +51,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static ring_buffer_size_t rbs_min(ring_buffer_size_t a, ring_buffer_size_t b)
-{
-    return (a < b) ? a : b;
-}
-
 #define SAMPLE_RATE (48000)
 #define FRAMES_PER_BUFFER (960)
 #define NUM_SECONDS (10)
@@ -82,7 +77,7 @@ static int audioCallback(const void *inputBuffer, void *outputBuffer, unsigned l
 {
     paTestData *data = (paTestData *)userData;
     if (outputBuffer) {
-        ring_buffer_size_t elementsToPlay = rawr_RingBuffer_GetReadAvailable(&data->rbToDevice);
+        size_t elementsToPlay = rawr_RingBuffer_GetReadAvailable(&data->rbToDevice);
         if (elementsToPlay < framesPerBuffer) {
             memset(outputBuffer, 0, framesPerBuffer * sizeof(SAMPLE));
         } else {
@@ -184,8 +179,8 @@ int main(void)
         mn_log_debug("Waiting for playback to finish.");
 
         while ((err = Pa_IsStreamActive(stream)) == 1) {
-            ring_buffer_size_t elementsReadable = rawr_RingBuffer_GetReadAvailable(&data.rbFromDevice);
-            ring_buffer_size_t elementsWriteable = rawr_RingBuffer_GetWriteAvailable(&data.rbToDevice);
+            size_t elementsReadable = rawr_RingBuffer_GetReadAvailable(&data.rbFromDevice);
+            size_t elementsWriteable = rawr_RingBuffer_GetWriteAvailable(&data.rbToDevice);
             if (elementsReadable < FRAMES_PER_BUFFER || elementsWriteable < FRAMES_PER_BUFFER) {
                 mn_thread_sleep(1);
             } else {

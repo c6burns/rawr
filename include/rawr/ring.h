@@ -70,30 +70,19 @@
  If you want to call them then you will need to add pa_ringbuffer.c to your application source code.
 */
 
-#if defined(__APPLE__)
-#    include <sys/types.h>
-typedef int32_t ring_buffer_size_t;
-#elif defined(__GNUC__)
-typedef long ring_buffer_size_t;
-#elif (_MSC_VER >= 1400)
-typedef long ring_buffer_size_t;
-#elif defined(_MSC_VER) || defined(__BORLANDC__)
-typedef long ring_buffer_size_t;
-#else
-typedef long ring_buffer_size_t;
-#endif
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
 typedef struct rawr_RingBuffer {
-    ring_buffer_size_t bufferSize;          /**< Number of elements in FIFO. Power of 2. Set by PaUtil_InitRingBuffer. */
-    volatile ring_buffer_size_t writeIndex; /**< Index of next writable element. Set by rawr_RingBuffer_AdvanceWriteIndex. */
-    volatile ring_buffer_size_t readIndex;  /**< Index of next readable element. Set by rawr_RingBuffer_AdvanceReadIndex. */
-    ring_buffer_size_t bigMask;             /**< Used for wrapping indices with extra bit to distinguish full/empty. */
-    ring_buffer_size_t smallMask;           /**< Used for fitting indices to buffer. */
-    ring_buffer_size_t elementSizeBytes;    /**< Number of bytes per element. */
+    size_t bufferSize;          /**< Number of elements in FIFO. Power of 2. Set by PaUtil_InitRingBuffer. */
+    volatile size_t writeIndex; /**< Index of next writable element. Set by rawr_RingBuffer_AdvanceWriteIndex. */
+    volatile size_t readIndex;  /**< Index of next readable element. Set by rawr_RingBuffer_AdvanceReadIndex. */
+    size_t bigMask;             /**< Used for wrapping indices with extra bit to distinguish full/empty. */
+    size_t smallMask;           /**< Used for fitting indices to buffer. */
+    size_t elementSizeBytes;    /**< Number of bytes per element. */
     char *buffer;                           /**< Pointer to the buffer containing the actual data. */
 } rawr_RingBuffer;
 
@@ -110,7 +99,7 @@ typedef struct rawr_RingBuffer {
 
  @return -1 if elementCount is not a power of 2, otherwise 0.
 */
-ring_buffer_size_t rawr_RingBuffer_Initialize(rawr_RingBuffer *rbuf, ring_buffer_size_t elementSizeBytes, ring_buffer_size_t elementCount, void *dataPtr);
+size_t rawr_RingBuffer_Initialize(rawr_RingBuffer *rbuf, size_t elementSizeBytes, size_t elementCount, void *dataPtr);
 
 /** Reset buffer to empty. Should only be called when buffer is NOT being read or written.
 
@@ -124,7 +113,7 @@ void rawr_RingBuffer_Flush(rawr_RingBuffer *rbuf);
 
  @return The number of elements available for writing.
 */
-ring_buffer_size_t rawr_RingBuffer_GetWriteAvailable(const rawr_RingBuffer *rbuf);
+size_t rawr_RingBuffer_GetWriteAvailable(const rawr_RingBuffer *rbuf);
 
 /** Retrieve the number of elements available in the ring buffer for reading.
 
@@ -132,7 +121,7 @@ ring_buffer_size_t rawr_RingBuffer_GetWriteAvailable(const rawr_RingBuffer *rbuf
 
  @return The number of elements available for reading.
 */
-ring_buffer_size_t rawr_RingBuffer_GetReadAvailable(const rawr_RingBuffer *rbuf);
+size_t rawr_RingBuffer_GetReadAvailable(const rawr_RingBuffer *rbuf);
 
 /** Write data to the ring buffer.
 
@@ -144,7 +133,7 @@ ring_buffer_size_t rawr_RingBuffer_GetReadAvailable(const rawr_RingBuffer *rbuf)
 
  @return The number of elements written.
 */
-ring_buffer_size_t rawr_RingBuffer_Write(rawr_RingBuffer *rbuf, const void *data, ring_buffer_size_t elementCount);
+size_t rawr_RingBuffer_Write(rawr_RingBuffer *rbuf, const void *data, size_t elementCount);
 
 /** Read data from the ring buffer.
 
@@ -156,7 +145,7 @@ ring_buffer_size_t rawr_RingBuffer_Write(rawr_RingBuffer *rbuf, const void *data
 
  @return The number of elements read.
 */
-ring_buffer_size_t rawr_RingBuffer_Read(rawr_RingBuffer *rbuf, void *data, ring_buffer_size_t elementCount);
+size_t rawr_RingBuffer_Read(rawr_RingBuffer *rbuf, void *data, size_t elementCount);
 
 /** Get address of region(s) to which we can write data.
 
@@ -178,7 +167,7 @@ ring_buffer_size_t rawr_RingBuffer_Read(rawr_RingBuffer *rbuf, void *data, ring_
 
  @return The room available to be written or elementCount, whichever is smaller.
 */
-ring_buffer_size_t rawr_RingBuffer_GetWriteRegions(rawr_RingBuffer *rbuf, ring_buffer_size_t elementCount, void **dataPtr1, ring_buffer_size_t *sizePtr1, void **dataPtr2, ring_buffer_size_t *sizePtr2);
+size_t rawr_RingBuffer_GetWriteRegions(rawr_RingBuffer *rbuf, size_t elementCount, void **dataPtr1, size_t *sizePtr1, void **dataPtr2, size_t *sizePtr2);
 
 /** Advance the write index to the next location to be written.
 
@@ -188,7 +177,7 @@ ring_buffer_size_t rawr_RingBuffer_GetWriteRegions(rawr_RingBuffer *rbuf, ring_b
 
  @return The new position.
 */
-ring_buffer_size_t rawr_RingBuffer_AdvanceWriteIndex(rawr_RingBuffer *rbuf, ring_buffer_size_t elementCount);
+size_t rawr_RingBuffer_AdvanceWriteIndex(rawr_RingBuffer *rbuf, size_t elementCount);
 
 /** Get address of region(s) from which we can read data.
 
@@ -210,7 +199,7 @@ ring_buffer_size_t rawr_RingBuffer_AdvanceWriteIndex(rawr_RingBuffer *rbuf, ring
 
  @return The number of elements available for reading.
 */
-ring_buffer_size_t rawr_RingBuffer_GetReadRegions(rawr_RingBuffer *rbuf, ring_buffer_size_t elementCount, void **dataPtr1, ring_buffer_size_t *sizePtr1, void **dataPtr2, ring_buffer_size_t *sizePtr2);
+size_t rawr_RingBuffer_GetReadRegions(rawr_RingBuffer *rbuf, size_t elementCount, void **dataPtr1, size_t *sizePtr1, void **dataPtr2, size_t *sizePtr2);
 
 /** Advance the read index to the next location to be read.
 
@@ -220,7 +209,7 @@ ring_buffer_size_t rawr_RingBuffer_GetReadRegions(rawr_RingBuffer *rbuf, ring_bu
 
  @return The new position.
 */
-ring_buffer_size_t rawr_RingBuffer_AdvanceReadIndex(rawr_RingBuffer *rbuf, ring_buffer_size_t elementCount);
+size_t rawr_RingBuffer_AdvanceReadIndex(rawr_RingBuffer *rbuf, size_t elementCount);
 
 #ifdef __cplusplus
 }

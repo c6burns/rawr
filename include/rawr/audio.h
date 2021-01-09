@@ -49,12 +49,13 @@ typedef enum rawr_AudioDeviceProps {
     rawr_AudioDeviceProps_InputStereo = 1 << 4,
 } rawr_AudioDeviceProps;
 
-typedef enum rawr_AudioStreamStatus {
-    rawr_AudioStreamStatus_New,
-    rawr_AudioStreamStatus_Ready,
-    rawr_AudioStreamStatus_Started,
-    rawr_AudioStreamStatus_Stopped,
-} rawr_AudioStreamStatus;
+typedef enum rawr_AudioStreamState {
+    rawr_AudioStreamState_New,
+    rawr_AudioStreamState_Ready,
+    rawr_AudioStreamState_Started,
+    rawr_AudioStreamState_Playing,
+    rawr_AudioStreamState_Stopped,
+} rawr_AudioStreamState;
 
 typedef struct rawr_AudioDevice rawr_AudioDevice;
 
@@ -75,7 +76,7 @@ int rawr_AudioDevice_OutputChannels(rawr_AudioDevice *dev);
 int rawr_AudioDevice_InputChannels(rawr_AudioDevice *dev);
 
 int rawr_AudioStream_Setup(rawr_AudioStream **out_stream, rawr_AudioRate sampleRate, int channelCount, int sampleCount);
-int rawr_AudioStream_Cleanup(rawr_AudioStream *stream);
+void rawr_AudioStream_Cleanup(rawr_AudioStream *stream);
 int rawr_AudioStream_AddDevice(rawr_AudioStream *stream, rawr_AudioDevice *dev);
 int rawr_AudioStream_Start(rawr_AudioStream *stream);
 int rawr_AudioStream_Stop(rawr_AudioStream *stream);
