@@ -68,10 +68,10 @@ typedef short SAMPLE;
 
 typedef struct
 {
-    SAMPLE *ringBufferDataRead;
-    SAMPLE *ringBufferDataWrite;
-    PaUtilRingBuffer rbToDevice;
-    PaUtilRingBuffer rbFromDevice;
+    SAMPLE *ringBufferDataTo;
+    SAMPLE *ringBufferDataFrom;
+    rawr_RingBuffer rbToDevice;
+    rawr_RingBuffer rbFromDevice;
     FILE *file;
     void *threadHandle;
 } paTestData;
@@ -124,19 +124,19 @@ int main(void)
     /* ~500 ms of buffer */
     numSamples = NextPowerOf2((unsigned)(SAMPLE_RATE * 0.5));
     numBytes = numSamples * sizeof(SAMPLE);
-    data.ringBufferDataRead = (SAMPLE *)MN_MEM_ACQUIRE(numBytes);
-    data.ringBufferDataWrite = (SAMPLE *)MN_MEM_ACQUIRE(numBytes);
-    if (!data.ringBufferDataRead || !data.ringBufferDataWrite) {
+    data.ringBufferDataTo = (SAMPLE *)MN_MEM_ACQUIRE(numBytes);
+    data.ringBufferDataFrom = (SAMPLE *)MN_MEM_ACQUIRE(numBytes);
+    if (!data.ringBufferDataTo || !data.ringBufferDataFrom) {
         mn_log_debug("Could not allocate ring buffer data.");
         goto done;
     }
 
-    if (rawr_RingBuffer_Initialize(&data.rbToDevice, sizeof(SAMPLE), numSamples, data.ringBufferDataRead) < 0) {
+    if (rawr_RingBuffer_Initialize(&data.rbToDevice, sizeof(SAMPLE), numSamples, data.ringBufferDataTo) < 0) {
         mn_log_debug("Failed to initialize ring buffer. Size is not power of 2 ??");
         goto done;
     }
 
-    if (rawr_RingBuffer_Initialize(&data.rbFromDevice, sizeof(SAMPLE), numSamples, data.ringBufferDataWrite) < 0) {
+    if (rawr_RingBuffer_Initialize(&data.rbFromDevice, sizeof(SAMPLE), numSamples, data.ringBufferDataFrom) < 0) {
         mn_log_debug("Failed to initialize ring buffer. Size is not power of 2 ??");
         goto done;
     }
@@ -203,8 +203,8 @@ int main(void)
 
 done:
     Pa_Terminate();
-    MN_MEM_RELEASE(data.ringBufferDataRead);
-    MN_MEM_RELEASE(data.ringBufferDataWrite);
+    MN_MEM_RELEASE(data.ringBufferDataTo);
+    MN_MEM_RELEASE(data.ringBufferDataFrom);
     if (err != paNoError) {
         mn_log_error("An error occurred while using the portaudio stream");
         mn_log_error("Error number: %d", err);
