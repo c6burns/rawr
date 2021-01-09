@@ -33,7 +33,7 @@ static struct rtp_sock *re_rtp;           /* RTP socket         */
 
 const char *re_registrar = "sip:sip.serverlynx.net";
 const char *re_uri = "sip:1001@serverlynx.net";
-const char *re_name = "Chris Burns";
+const char *re_name = "ChrisBurns";
 const char *re_user = "1001";
 const char *re_pass = "422423";
 char *re_ext_ip = NULL;
