@@ -22,22 +22,6 @@
 
 #define UDP_OVERHEAD_BYTES 54
 #define MAX_PACKET (1500)
-#define SAMPLES (48000 * 30)
-#define SSAMPLES (SAMPLES / 3)
-#define MAX_FRAME_SAMP (5760)
-#define PI (3.141592653589793238462643f)
-
-/* #define SAMPLE_RATE  (17932) // Test failure to open with this value. */
-#define SAMPLE_RATE (48000)
-#define FRAMES_PER_BUFFER (960)
-#define NUM_SECONDS (10)
-/* #define DITHER_FLAG     (paDitherOff)  */
-#define DITHER_FLAG (0)
-
-#define PA_SAMPLE_TYPE paInt16
-#define SAMPLE_SIZE (2)
-#define SAMPLE_SILENCE (0)
-#define PRINTF_S_FORMAT "%d"
 
 static struct sipsess_sock *re_sess_sock; /* SIP session socket */
 static struct sdp_session *re_sdp;        /* SDP session        */
@@ -77,6 +61,7 @@ int opus_frame_size;
 rawr_AudioDevice *opus_outDevice;
 rawr_Codec *opus_decoder;
 rawr_AudioStream *opus_stream = NULL;
+mn_atomic_t opus_thread_stopping = MN_ATOMIC_INIT(0);
 
 uint64_t rtp_bytes_sent, rtp_wait_ns, rtp_tstamp_last;
 
@@ -86,22 +71,22 @@ void rtp_session_send_thread(void *arg)
     rawr_Codec *encoder;
     rawr_AudioStream *stream = NULL;
     PaError err;
-    int numBytes;
-    int len;
+    int len, numBytes, sampleCount;
     char *sampleBlock = NULL;
-    int numChannels = 1;
     int frame_size = rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms);
     uint64_t bytes_sent, wait_ns, tstamp, tstamp_last;
     uint8_t rtp_type = 0x74;
     if (re_receiver) rtp_type = 0x66;
 
-    numBytes = FRAMES_PER_BUFFER * numChannels * SAMPLE_SIZE;
+    mn_atomic_store(&opus_thread_stopping, 0);
+
+    numBytes = frame_size * sizeof(rawr_AudioSample);
     sampleBlock = (char *)malloc(numBytes);
     if (sampleBlock == NULL) {
         mn_log_error("recv: Could not allocate record array.");
         return;
     }
-    memset(sampleBlock, SAMPLE_SILENCE, numBytes);
+    memset(sampleBlock, 0, numBytes);
 
     // set up buffer for rtmp packets
     re_mb = mbuf_alloc(MAX_PACKET);
@@ -123,8 +108,8 @@ void rtp_session_send_thread(void *arg)
     wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
     bytes_sent = 0;
     tstamp_last = mn_tstamp();
-    while (1) {
-        int sampleCount = 0;
+    while (!mn_atomic_load(&opus_thread_stopping)) {
+        sampleCount = 0;
         while ((sampleCount = rawr_AudioStream_Read(stream, sampleBlock)) == 0) {}
         RAWR_GUARD_CLEANUP(sampleCount < 0);
 
@@ -164,6 +149,8 @@ static void terminate(void)
     /* terminate registration */
     re_reg = mem_deref(re_reg);
 
+    mn_atomic_store(&opus_thread_stopping, 1);
+
     /* wait for pending transactions to finish */
     sip_close(re_sip, false);
 }
@@ -189,7 +176,7 @@ static void rawr_rtp_handler(const struct sa *src, const struct rtp_header *hdr,
         RAWR_GUARD_NULL_CLEANUP(opus_inbuf = MN_MEM_ACQUIRE(numBytes));
         RAWR_GUARD_NULL_CLEANUP(opus_outbuf = MN_MEM_ACQUIRE(numBytes));
         RAWR_GUARD_NULL_CLEANUP(silenceSamples = MN_MEM_ACQUIRE(numBytes));
-        memset(silenceSamples, SAMPLE_SILENCE, numBytes);
+        memset(silenceSamples, 0, numBytes);
 
         opus_outDevice = rawr_AudioDevice_DefaultOutput();
 
@@ -238,9 +225,10 @@ cleanup:
 /* called for every received RTCP packet */
 static void rtcp_handler(const struct sa *src, struct rtcp_msg *msg, void *arg)
 {
+    (void)src;
+    (void)msg;
     (void)arg;
-
-    re_printf("rtcp: recv %s from %J\n", rtcp_type_name(msg->hdr.pt), src);
+    //re_printf("rtcp: recv %s from %J\n", rtcp_type_name(msg->hdr.pt), src);
 }
 
 /* called when challenged for credentials */
