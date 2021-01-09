@@ -21,7 +21,6 @@ set(RAWR_LIBUV ON CACHE BOOL "Builds and links libuv as a dependency")
 set(RAWR_MN ON CACHE BOOL "Builds and links libmn as a dependency")
 set(RAWR_OPUS ON CACHE BOOL "Builds and links opus as a dependency")
 set(RAWR_STROPHE OFF CACHE BOOL "Builds and links libstrophe as a dependency")
-set(RAWR_JUICE ON CACHE BOOL "Builds and links libjuice as a dependency")
 set(RAWR_RE ON CACHE BOOL "Builds and links libre as a dependency")
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -155,13 +154,6 @@ if (RAWR_STROPHE)
 	list(APPEND RAWR_INCLUDE_DIRS deps/libstrophe)
 endif()
 
-# libjuice
-if (RAWR_JUICE)
-	add_subdirectory(deps/libjuice)
-	list(APPEND RAWR_LINK_LIBS juice)
-	list(APPEND RAWR_INCLUDE_DIRS deps/libjuice/include)
-endif()
-
 # re
 if (RAWR_RE)
 	add_subdirectory(deps/re)
@@ -190,15 +182,21 @@ rawr_add_library(rawr
 	include/rawr/app.h
 	include/rawr/buf.h
 	include/rawr/audio.h
+    include/rawr/endpoint.h
     include/rawr/opus.h
     include/rawr/ring.h
+    include/rawr/stun.h
 	include/rawr/term.h
+    include/rawr/util.h
 	src/app.c
 	src/buf.c
 	src/audio.c
+    src/endpoint.c
     src/opus.c
     src/ring.c
+    src/stun.c
 	src/term.c
+    src/util.c
 )
 
 #
@@ -219,12 +217,6 @@ macro(rawr_add_executable rname)
 	if (TARGET uv)
 		add_custom_command(TARGET ${rname} POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:uv> $<TARGET_FILE_DIR:${rname}>
-		)
-	endif()
-
-    if (TARGET juice)
-		add_custom_command(TARGET ${rname} POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:juice> $<TARGET_FILE_DIR:${rname}>
 		)
 	endif()
 endmacro()
@@ -300,15 +292,11 @@ if (TARGET libwebsockets)
     )
 endif()
 
-# playground: libjuice
-if (TARGET juice)
-	rawr_add_executable(playground_juice src/playground/juice/playground_juice.c)
-endif()
-
 # playground: re
 if (TARGET re)
 	rawr_add_executable(playground_re_sip src/playground/re/playground_re_sip.c)
     rawr_add_executable(playground_ice src/playground/re/playground_ice.c)
+    rawr_add_executable(playground_stun src/playground/re/playground_stun.c)
 endif()
 
 
