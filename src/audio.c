@@ -397,7 +397,7 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream)
         pInParams->channelCount = stream->channelCount;
         pInParams->device = rawr_AudioDevice_Id(stream->inDevice);
         pInParams->sampleFormat = paInt16;
-        pInParams->suggestedLatency = 0;
+        pInParams->suggestedLatency = rawr_AudioDevice_Priv(stream->inDevice)->deviceInfo->defaultLowInputLatency;
         pInParams->hostApiSpecificStreamInfo = NULL;
     }
 
@@ -407,7 +407,7 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream)
         pOutParams->channelCount = stream->channelCount;
         pOutParams->device = rawr_AudioDevice_Id(stream->outDevice);
         pOutParams->sampleFormat = paInt16;
-        pOutParams->suggestedLatency = 0;
+        pOutParams->suggestedLatency = rawr_AudioDevice_Priv(stream->outDevice)->deviceInfo->defaultLowInputLatency;
         pOutParams->hostApiSpecificStreamInfo = NULL;
     }
 
@@ -427,7 +427,7 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream)
     errCode = -2;
     RAWR_GUARD_CLEANUP(Pa_StartStream(priv->pa_stream));
 
-    stream->state = rawr_AudioStreamState_Playing;
+    stream->state = rawr_AudioStreamState_Started;
 
     return rawr_Success;
 
@@ -450,7 +450,7 @@ int rawr_AudioStream_Read(rawr_AudioStream *stream, void *buffer)
     RAWR_ASSERT(stream);
 
     rawr_RingBuffer *rb = &rawr_AudioStream_Priv(stream)->rbFromDevice;
-    if (rawr_RingBuffer_GetReadAvailable(rb) < stream->sampleCount) {
+    if (stream->state != rawr_AudioStreamState_Playing || rawr_RingBuffer_GetReadAvailable(rb) < stream->sampleCount) {
         //memset(buffer, 0, stream->sampleCount * sizeof(rawr_AudioSample));
         return 0;
         //stream->sampleCount;
@@ -465,7 +465,7 @@ int rawr_AudioStream_Write(rawr_AudioStream *stream, void *buffer)
     RAWR_ASSERT(stream);
 
     rawr_RingBuffer *rb = &rawr_AudioStream_Priv(stream)->rbToDevice;
-    if (rawr_RingBuffer_GetWriteAvailable(rb) < stream->sampleCount) {
+    if (stream->state != rawr_AudioStreamState_Playing || rawr_RingBuffer_GetWriteAvailable(rb) < stream->sampleCount) {
         return 0;
     }
 
