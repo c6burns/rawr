@@ -735,9 +735,9 @@ int main(int argc, char *argv[])
     /* invite provided URI */
     if (1) {
         //const char *const invite_uri = "sip:1002@sip.serverlynx.net"; // c6 cell user
-        //const char *const invite_uri = "sip:3300@sip.serverlynx.net"; // conference
+        const char *const invite_uri = "sip:3300@sip.serverlynx.net"; // conference
         //const char *const invite_uri = "sip:9195@sip.serverlynx.net"; // 5s delay echo test
-        const char *const invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
+        //const char *const invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
         //const char *const invite_uri = "sip:9197@sip.serverlynx.net"; // tone 1
         //const char *const invite_uri = "sip:9198@sip.serverlynx.net"; // tone 2
         struct mbuf *mb;
