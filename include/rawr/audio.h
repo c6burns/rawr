@@ -3,6 +3,8 @@
 
 #define RAWR_AUDIOSTREAM_SAMPLECOUNT_MAX
 
+typedef short rawr_AudioSample;
+
 typedef int rawr_AudioDeviceId;
 
 typedef enum rawr_AudioRate {

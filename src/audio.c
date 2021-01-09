@@ -1,4 +1,5 @@
 #include "rawr/audio.h"
+#include "rawr/ring.h"
 #include "rawr/error.h"
 
 #include "portaudio.h"
@@ -48,6 +49,10 @@ typedef struct rawr_AudioStreamPriv {
     PaStream *pa_stream;
     PaStreamParameters inParameters;
     PaStreamParameters outParameters;
+    rawr_AudioSample *ringBufferDataTo;
+    rawr_AudioSample *ringBufferDataFrom;
+    rawr_RingBuffer rbToDevice;
+    rawr_RingBuffer rbFromDevice;
 } rawr_AudioStreamPriv;
 
 typedef struct rawr_AudioStream {
