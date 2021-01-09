@@ -1,8 +1,7 @@
-#include "rawr/error.h"
-#include "rawr/endpoint.h"
 #include "rawr/audio.h"
+#include "rawr/endpoint.h"
+#include "rawr/error.h"
 #include "rawr/opus.h"
-#include "re.h"
 
 #include "mn/allocator.h"
 #include "mn/atomic.h"
@@ -10,14 +9,16 @@
 #include "mn/log.h"
 #include "mn/thread.h"
 #include "mn/time.h"
+
 #include "playground_srtp.h"
 
+#include "re.h"
 #include "opus.h"
 #include "portaudio.h"
 #include "srtp.h"
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define UDP_OVERHEAD_BYTES 54
 #define MAX_PACKET (1500)
@@ -79,13 +80,6 @@ rawr_AudioStream *opus_stream = NULL;
 
 uint64_t rtp_bytes_sent, rtp_wait_ns, rtp_tstamp_last;
 
-void rtp_session_run_sip_sendrecv(void *arg)
-{
-    mn_log_warning("STARTING: %s:%u <-> %u", "0.0.0.0", re_local_port, re_remote_port);
-    //rtp_session_bothlegs_run(re_remote_ip, re_local_port, re_remote_port);
-    mn_log_warning("receiver thread exiting");
-}
-
 void rtp_session_send_thread(void *arg)
 {
     rawr_AudioDevice *inDevice;
@@ -125,7 +119,7 @@ void rtp_session_send_thread(void *arg)
     RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&encoder, rawr_CodecType_Encoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
 
     RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(stream));
-    
+
     wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
     bytes_sent = 0;
     tstamp_last = mn_tstamp();
@@ -143,7 +137,7 @@ void rtp_session_send_thread(void *arg)
 
         bytes_sent += len + UDP_OVERHEAD_BYTES;
         re_ts += 960;
-        
+
         rtp_send(re_rtp, sdp_media_raddr(re_sdp_media), 0, 0, rtp_type, re_ts, re_mb);
 
         tstamp = mn_tstamp();
@@ -235,169 +229,6 @@ static void rawr_rtp_handler(const struct sa *src, const struct rtp_header *hdr,
     while ((sampleCount = rawr_AudioStream_Write(opus_stream, opus_outbuf)) == 0) {}
     RAWR_GUARD_CLEANUP(sampleCount < 0);
 
-    return;
-
-cleanup:
-    mn_log_error("error during recv");
-}
-
-/* called for every received RTP packet */
-static void rtp_handler(const struct sa *src, const struct rtp_header *hdr, struct mbuf *mb, void *arg)
-{
-    (void)hdr;
-    (void)arg;
-
-    if (!pa_init) {
-        pa_init = 1;
-
-        PaStreamParameters outputParameters;
-        PaError err;
-        const PaDeviceInfo *inputInfo;
-        const PaDeviceInfo *outputInfo;
-        char *sampleBlock = NULL;
-        int i;
-        int numBytes;
-        int numChannels;
-
-        int j;
-
-        int sampling_rate = 48000;
-        int num_channels = 1;
-        int application = OPUS_APPLICATION_VOIP;
-
-        int samp_count = 0;
-
-        int bitrate = OPUS_AUTO;
-        int force_channel = 1;
-        int vbr = 1;
-        int vbr_constraint = 1;
-        int complexity = 5;
-        int max_bw = OPUS_BANDWIDTH_FULLBAND;
-        int sig = OPUS_SIGNAL_VOICE;
-        int inband_fec = 0;
-        int pkt_loss = 1;
-        int lsb_depth = 8;
-        int pred_disabled = 0;
-        int dtx = 1;
-        int frame_size_ms_x2 = 40;
-        int frame_size_enum;
-
-        PaDeviceIndex inputDevice = -1, outputDevice = -1;
-        int numDevices;
-        const PaDeviceInfo *deviceInfo;
-
-        opus_frame_size = frame_size_ms_x2 * sampling_rate / 2000;
-        frame_size_enum = get_frame_size_enum(opus_frame_size, sampling_rate);
-        force_channel = 1;
-
-        /* Generate input data */
-        opus_inbuf = (opus_int16 *)malloc(sizeof(*opus_inbuf) * SSAMPLES);
-        //generate_music(inbuf, SSAMPLES / 2);
-
-        /* Allocate memory for output data */
-        opus_outbuf = (opus_int16 *)malloc(sizeof(*opus_outbuf) * MAX_FRAME_SAMP * 3);
-
-        numDevices = Pa_GetDeviceCount();
-        if (numDevices < 0) {
-            printf("ERROR: Pa_GetDeviceCount returned 0x%x\n", numDevices);
-            err = numDevices;
-            return;
-        }
-
-        for (i = 0; i < numDevices; i++) {
-            deviceInfo = Pa_GetDeviceInfo(i);
-
-            if (i == Pa_GetDefaultOutputDevice()) {
-                outputDevice = i;
-            } else if (i == Pa_GetHostApiInfo(deviceInfo->hostApi)->defaultOutputDevice) {
-                const PaHostApiInfo *hostInfo = Pa_GetHostApiInfo(deviceInfo->hostApi);
-                if (!outputDevice) outputDevice = i;
-            }
-        }
-
-        mn_log_trace("sizeof(int) = %lu", sizeof(int));
-        mn_log_trace("sizeof(long) = %lu", sizeof(long));
-
-        //numChannels = inputInfo->maxInputChannels < outputInfo->maxOutputChannels
-        //                  ? inputInfo->maxInputChannels
-        //                  : outputInfo->maxOutputChannels;
-        numChannels = 1;
-        mn_log_trace("Num channels = %d.", numChannels);
-
-        if (outputDevice >= 0) {
-            outputInfo = Pa_GetDeviceInfo(outputDevice);
-            outputParameters.device = outputDevice;
-            outputParameters.channelCount = numChannels;
-            outputParameters.sampleFormat = PA_SAMPLE_TYPE;
-            outputParameters.suggestedLatency = outputInfo->defaultHighOutputLatency;
-            outputParameters.hostApiSpecificStreamInfo = NULL;
-
-            mn_log_trace("Output device # %d.", outputParameters.device);
-
-            mn_log_trace("   Name: %s", outputInfo->name);
-            mn_log_trace("     LL: %g s", outputInfo->defaultLowOutputLatency);
-            mn_log_trace("     HL: %g s", outputInfo->defaultHighOutputLatency);
-        }
-
-        /* -- setup opus -- */
-
-        opus_dec = opus_decoder_create(sampling_rate, num_channels, &err);
-        if (err != OPUS_OK || opus_dec == NULL) return;
-
-        err = Pa_OpenStream(
-            &pa_stream_write,
-            NULL,
-            &outputParameters,
-            SAMPLE_RATE,
-            opus_frame_size,
-            paClipOff, /* we won't output out of range samples so don't bother clipping them */
-            NULL,      /* no callback, use blocking API */
-            NULL);     /* no callback, so no callback userData */
-        if (err != paNoError) return;
-
-        numBytes = FRAMES_PER_BUFFER * numChannels * SAMPLE_SIZE;
-        sampleBlock = (char *)malloc(numBytes);
-        if (sampleBlock == NULL) {
-            mn_log_error("recv: Could not allocate record array.");
-            return;
-        }
-        memset(sampleBlock, SAMPLE_SILENCE, numBytes);
-
-        err = Pa_StartStream(pa_stream_write);
-        if (err != paNoError) return;
-
-        for (int primer = 0; primer < 4; primer++) {
-            err = Pa_WriteStream(pa_stream_write, sampleBlock, FRAMES_PER_BUFFER);
-            if (err) return;
-        }
-
-        rtp_wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
-        rtp_bytes_sent = 0;
-        rtp_tstamp_last = mn_tstamp();
-    }
-
-    //re_printf("rtp: recv %zu bytes from %J\n", mbuf_get_left(mb), src);
-    rtp_bytes_sent += mbuf_get_left(mb) + UDP_OVERHEAD_BYTES;
-    uint64_t tstamp = mn_tstamp();
-    if ((tstamp - rtp_tstamp_last) > rtp_wait_ns) {
-        mn_log_warning("recv rate: %.2f KB/s", (double)rtp_bytes_sent / 1024.0);
-        rtp_tstamp_last = tstamp;
-        rtp_bytes_sent = 0;
-    }
-
-    {
-        int out_samples, ret;
-
-        out_samples = opus_decode(opus_dec, mbuf_buf(mb), mbuf_get_left(mb), opus_outbuf, MAX_FRAME_SAMP, 0);
-        if (out_samples != opus_frame_size) {
-            mn_log_error("recv: opus_decode() returned %d", out_samples);
-            goto cleanup;
-        }
-
-        if (Pa_WriteStream(pa_stream_write, opus_outbuf, FRAMES_PER_BUFFER)) {
-            goto cleanup;
-        }
-    }
     return;
 
 cleanup:
@@ -640,7 +471,6 @@ int main(int argc, char *argv[])
 
     RAWR_GUARD_CLEANUP(libre_init());
 
-
     rawr_Endpoint_SetBytes(&epStunServ, 3, 223, 157, 6, 3478);
 
     rawr_StunClient_BindingRequest(&epStunServ, &epExternal);
@@ -649,7 +479,6 @@ int main(int argc, char *argv[])
     uint16_t port;
     rawr_Endpoint_String(&epExternal, &port, ipstr, 255);
     mn_log_info("Found external IP via STUN: %s", ipstr);
-
 
     nsc = ARRAY_SIZE(nsv);
 
