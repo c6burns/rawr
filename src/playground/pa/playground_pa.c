@@ -4,9 +4,11 @@
 
 #include "mn/allocator.h"
 #include "mn/log.h"
-#include "portaudio.h"
+#include "mn/thread.h"
 
+#include "portaudio.h"
 #include "opus.h"
+
 #include <stdlib.h>
 
 #define MAX_PACKET (1500)
@@ -50,7 +52,15 @@
 #    define PRINTF_S_FORMAT "%d"
 #endif
 
+void threaded_decode_fn(rawr_AudioStream *stream)
+{
 
+}
+
+void threaded_encode_fn(rawr_AudioStream *stream)
+{
+
+}
 
 int main(void)
 {
@@ -68,7 +78,7 @@ int main(void)
     int num_channels = 1;
     int application = OPUS_APPLICATION_VOIP;
 
-    int samp_count = 0;
+    int sampleCount = 0;
     opus_int16 *inbuf = NULL;
     unsigned char packet[MAX_PACKET + 257];
     int len;
@@ -82,7 +92,10 @@ int main(void)
 
     rawr_Codec *decoder, *encoder;
 
-    mn_log_trace("testing portaudio and opus ...");
+    mn_thread_t thread_decode = {0};
+    mn_thread_t thread_encode = {0};
+
+    mn_log_trace("testing threaded portaudio and opus ...");
 
     rawr_Audio_Setup();
 
@@ -116,20 +129,29 @@ int main(void)
     RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&decoder, rawr_CodecType_Decoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
 
     RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(stream));
-    mn_log_trace("Talk (or whatever) for %d seconds.", NUM_SECONDS);
+    mn_log_trace("Talk (or whatever) and hear it back", NUM_SECONDS);
 
-    for (i = 0; i < (NUM_SECONDS * SAMPLE_RATE) / FRAMES_PER_BUFFER; ++i) {
-        RAWR_GUARD_CLEANUP(rawr_AudioStream_Read(stream, sampleBlock));
+    mn_thread_setup(&thread_decode);
+    //mn_thread_launch(&thread_decode, threaded_decode_fn, stream);
 
-        /* encode data here, and then ... */
-        samp_count = 0;
-        len = rawr_Codec_Encode(encoder, sampleBlock, packet);
+    mn_thread_setup(&thread_encode);
+    //mn_thread_launch(&thread_encode, threaded_encode_fn, stream);
+
+    for (;;) {
+        sampleCount = 0;
+        while ((sampleCount = rawr_AudioStream_Read(stream, sampleBlock)) == 0) {
+            mn_thread_sleep_ns(1);
+        }
+        RAWR_GUARD_CLEANUP(sampleCount < 0);
+
+        RAWR_GUARD_CLEANUP((len = rawr_Codec_Encode(encoder, sampleBlock, packet)) < 0);
 
         /* decode data here for sanity check */
-        out_samples = rawr_Codec_Decode(decoder, packet, len, outbuf);
-        samp_count += out_samples;
+        RAWR_GUARD_CLEANUP(rawr_Codec_Decode(decoder, packet, len, outbuf) < 0);
 
-        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(stream, sampleBlock));
+        sampleCount = 0;
+        while ((sampleCount = rawr_AudioStream_Write(stream, outbuf)) == 0) {}
+        RAWR_GUARD_CLEANUP(sampleCount < 0);
     }
     mn_log_trace("Wire off.");
 
@@ -138,7 +160,7 @@ int main(void)
 
     RAWR_GUARD_CLEANUP(rawr_AudioStream_Stop(stream));
 
-    RAWR_GUARD_CLEANUP(rawr_AudioStream_Cleanup(stream));
+    rawr_AudioStream_Cleanup(stream);
 
     MN_MEM_RELEASE(inbuf);
     MN_MEM_RELEASE(outbuf);
