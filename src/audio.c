@@ -279,14 +279,13 @@ int rawr_AudioStream_AudioCallback(const void *inputBuffer, void *outputBuffer, 
 
     if (outputBuffer) {
         size_t avail = rawr_RingBuffer_GetReadAvailable(&priv->rbToDevice);
-        pct = 1.f - (float)avail / total;
-        //mn_log_debug("read buffer: %0.2f", pct);
+        pct = (float)avail / (float)stream->sampleCapacity;
 
         if (avail < framesPerBuffer) {
+            mn_log_debug("silence");
             memset(outputBuffer, 0, framesPerBuffer * sizeof(rawr_AudioSample));
         } else {
             size_t read = rawr_RingBuffer_Read(&priv->rbToDevice, outputBuffer, framesPerBuffer);
-            mn_log_info("read: %zu", read);
         }
     }
 
@@ -294,13 +293,11 @@ int rawr_AudioStream_AudioCallback(const void *inputBuffer, void *outputBuffer, 
         size_t avail = rawr_RingBuffer_GetWriteAvailable(&priv->rbFromDevice);
         
         pct = (float) avail / (float)stream->sampleCapacity;
-        mn_log_debug("write buffer: %0.2f", pct);
 
         if (stream->state == rawr_AudioStreamState_Started) {
-            if (pct < 0.5f) stream->state = rawr_AudioStreamState_Playing;
+            if (pct < 0.2f) stream->state = rawr_AudioStreamState_Playing;
         }
         size_t wrote = rawr_RingBuffer_Write(&priv->rbFromDevice, inputBuffer, framesPerBuffer);
-        mn_log_info("wrote: %zu", wrote);
     }
 
     return paContinue;
@@ -453,9 +450,9 @@ int rawr_AudioStream_Read(rawr_AudioStream *stream, void *buffer)
     RAWR_ASSERT(stream);
 
     rawr_RingBuffer *rb = &rawr_AudioStream_Priv(stream)->rbFromDevice;
-    if (stream->state != rawr_AudioStreamState_Playing || rawr_RingBuffer_GetReadAvailable(rb) < stream->sampleCount) {
+    if (rawr_RingBuffer_GetReadAvailable(rb) < stream->sampleCount) {
         memset(buffer, 0, stream->sampleCount * sizeof(rawr_AudioSample));
-        return stream->sampleCount * sizeof(rawr_AudioSample);
+        return stream->sampleCount;
     }
 
     return rawr_RingBuffer_Read(rb, buffer, stream->sampleCount);
@@ -467,8 +464,8 @@ int rawr_AudioStream_Write(rawr_AudioStream *stream, void *buffer)
     RAWR_ASSERT(stream);
 
     rawr_RingBuffer *rb = &rawr_AudioStream_Priv(stream)->rbToDevice;
-    if (stream->state != rawr_AudioStreamState_Playing || rawr_RingBuffer_GetWriteAvailable(rb) < stream->sampleCount) {
-        return stream->sampleCount * sizeof(rawr_AudioSample);
+    if (rawr_RingBuffer_GetWriteAvailable(rb) < stream->sampleCount) {
+        return 0;
     }
 
     return rawr_RingBuffer_Write(rb, buffer, stream->sampleCount);

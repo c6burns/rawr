@@ -139,9 +139,7 @@ int main(void)
 
     for (;;) {
         sampleCount = 0;
-        while ((sampleCount = rawr_AudioStream_Read(stream, sampleBlock)) == 0) {
-            mn_thread_sleep_ns(1);
-        }
+        while ((sampleCount = rawr_AudioStream_Read(stream, sampleBlock)) == 0) {}
         RAWR_GUARD_CLEANUP(sampleCount < 0);
 
         RAWR_GUARD_CLEANUP((len = rawr_Codec_Encode(encoder, sampleBlock, packet)) < 0);
