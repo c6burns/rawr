@@ -276,16 +276,16 @@ int rawr_AudioStream_AudioCallback(const void *inputBuffer, void *outputBuffer, 
     size_t total = 96000;
     float pct;
 
-    if (statusFlags & paInputUnderflow) mn_log_debug("paInputUnderflow");
-    if (statusFlags & paInputOverflow) mn_log_debug("paInputOverflow");
-    if (statusFlags & paOutputUnderflow) mn_log_debug("paOutputUnderflow");
-    if (statusFlags & paOutputOverflow) mn_log_debug("paOutputOverflow");
-    if (statusFlags & paPrimingOutput) mn_log_debug("paPrimingOutput");
+    //if (statusFlags & paInputUnderflow) mn_log_debug("paInputUnderflow");
+    //if (statusFlags & paInputOverflow) mn_log_debug("paInputOverflow");
+    //if (statusFlags & paOutputUnderflow) mn_log_debug("paOutputUnderflow");
+    //if (statusFlags & paOutputOverflow) mn_log_debug("paOutputOverflow");
+    //if (statusFlags & paPrimingOutput) mn_log_debug("paPrimingOutput");
 
     if (outputBuffer) {
         size_t avail = rawr_RingBuffer_GetReadAvailable(&priv->rbToDevice);
         if (avail < framesPerBuffer) {
-            mn_log_debug("emitting silence");
+            //mn_log_debug("emitting silence");
             memset(outputBuffer, 0, framesPerBuffer * sizeof(rawr_AudioSample));
         } else {
             rawr_RingBuffer_Read(&priv->rbToDevice, outputBuffer, framesPerBuffer);
