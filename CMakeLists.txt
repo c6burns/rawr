@@ -187,6 +187,7 @@ rawr_add_library(rawr
     include/rawr/ring.h
     include/rawr/stun.h
 	include/rawr/term.h
+    include/rawr/util.h
 	src/app.c
 	src/buf.c
 	src/audio.c
@@ -195,6 +196,7 @@ rawr_add_library(rawr
     src/ring.c
     src/stun.c
 	src/term.c
+    src/util.c
 )
 
 #
