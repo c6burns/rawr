@@ -62,7 +62,6 @@ typedef struct rawr_AudioStream {
     rawr_AudioDevice *outDevice;
     rawr_AudioRate sampleRate;
     size_t sampleCapacity;
-    rawr_AudioStreamState state;
     int channelCount;
     int sampleCount;
 } rawr_AudioStream;
@@ -277,27 +276,24 @@ int rawr_AudioStream_AudioCallback(const void *inputBuffer, void *outputBuffer, 
     size_t total = 96000;
     float pct;
 
+    if (statusFlags & paInputUnderflow) mn_log_debug("paInputUnderflow");
+    if (statusFlags & paInputOverflow) mn_log_debug("paInputOverflow");
+    if (statusFlags & paOutputUnderflow) mn_log_debug("paOutputUnderflow");
+    if (statusFlags & paOutputOverflow) mn_log_debug("paOutputOverflow");
+    if (statusFlags & paPrimingOutput) mn_log_debug("paPrimingOutput");
+
     if (outputBuffer) {
         size_t avail = rawr_RingBuffer_GetReadAvailable(&priv->rbToDevice);
-        pct = (float)avail / (float)stream->sampleCapacity;
-
         if (avail < framesPerBuffer) {
-            mn_log_debug("silence");
+            mn_log_debug("emitting silence");
             memset(outputBuffer, 0, framesPerBuffer * sizeof(rawr_AudioSample));
         } else {
-            size_t read = rawr_RingBuffer_Read(&priv->rbToDevice, outputBuffer, framesPerBuffer);
+            rawr_RingBuffer_Read(&priv->rbToDevice, outputBuffer, framesPerBuffer);
         }
     }
 
     if (inputBuffer) {
-        size_t avail = rawr_RingBuffer_GetWriteAvailable(&priv->rbFromDevice);
-        
-        pct = (float) avail / (float)stream->sampleCapacity;
-
-        if (stream->state == rawr_AudioStreamState_Started) {
-            if (pct < 0.2f) stream->state = rawr_AudioStreamState_Playing;
-        }
-        size_t wrote = rawr_RingBuffer_Write(&priv->rbFromDevice, inputBuffer, framesPerBuffer);
+        rawr_RingBuffer_Write(&priv->rbFromDevice, inputBuffer, framesPerBuffer);
     }
 
     return paContinue;
@@ -317,7 +313,6 @@ int rawr_AudioStream_Setup(rawr_AudioStream **out_stream, rawr_AudioRate sampleR
     (*out_stream)->sampleRate = sampleRate;
     (*out_stream)->channelCount = channelCount;
     (*out_stream)->sampleCount = sampleCount;
-    (*out_stream)->state = rawr_AudioStreamState_Ready;
     numSamples = rawr_Util_NextPowerOf2((unsigned)((*out_stream)->sampleCount * 10));
     (*out_stream)->sampleCapacity = numSamples;
     
@@ -427,8 +422,6 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream)
     errCode = -2;
     RAWR_GUARD_CLEANUP(Pa_StartStream(priv->pa_stream));
 
-    stream->state = rawr_AudioStreamState_Started;
-
     return rawr_Success;
 
 cleanup:
@@ -450,10 +443,8 @@ int rawr_AudioStream_Read(rawr_AudioStream *stream, void *buffer)
     RAWR_ASSERT(stream);
 
     rawr_RingBuffer *rb = &rawr_AudioStream_Priv(stream)->rbFromDevice;
-    if (stream->state != rawr_AudioStreamState_Playing || rawr_RingBuffer_GetReadAvailable(rb) < stream->sampleCount) {
-        //memset(buffer, 0, stream->sampleCount * sizeof(rawr_AudioSample));
+    if (rawr_RingBuffer_GetReadAvailable(rb) < stream->sampleCount) {
         return 0;
-        //stream->sampleCount;
     }
 
     return rawr_RingBuffer_Read(rb, buffer, stream->sampleCount);
@@ -465,7 +456,7 @@ int rawr_AudioStream_Write(rawr_AudioStream *stream, void *buffer)
     RAWR_ASSERT(stream);
 
     rawr_RingBuffer *rb = &rawr_AudioStream_Priv(stream)->rbToDevice;
-    if (stream->state != rawr_AudioStreamState_Playing || rawr_RingBuffer_GetWriteAvailable(rb) < stream->sampleCount) {
+    if (rawr_RingBuffer_GetWriteAvailable(rb) < stream->sampleCount) {
         return 0;
     }
 

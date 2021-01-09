@@ -130,7 +130,9 @@ void rtp_session_send_thread(void *arg)
     bytes_sent = 0;
     tstamp_last = mn_tstamp();
     while (1) {
-        while(rawr_AudioStream_Read(stream, sampleBlock) <= 0);
+        int sampleCount = 0;
+        while ((sampleCount = rawr_AudioStream_Read(stream, sampleBlock)) == 0) {}
+        RAWR_GUARD_CLEANUP(sampleCount < 0);
 
         RAWR_GUARD_CLEANUP((len = rawr_Codec_Encode(encoder, sampleBlock, opus_packet)) < 0);
 
@@ -229,7 +231,9 @@ static void rawr_rtp_handler(const struct sa *src, const struct rtp_header *hdr,
 
     RAWR_GUARD_CLEANUP(rawr_Codec_Decode(opus_decoder, mbuf_buf(mb), mbuf_get_left(mb), opus_outbuf) < 0);
 
-    RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(opus_stream, opus_outbuf) < 0);
+    int sampleCount = 0;
+    while ((sampleCount = rawr_AudioStream_Write(opus_stream, opus_outbuf)) == 0) {}
+    RAWR_GUARD_CLEANUP(sampleCount < 0);
 
     return;
 

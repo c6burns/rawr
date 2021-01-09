@@ -49,14 +49,6 @@ typedef enum rawr_AudioDeviceProps {
     rawr_AudioDeviceProps_InputStereo = 1 << 4,
 } rawr_AudioDeviceProps;
 
-typedef enum rawr_AudioStreamState {
-    rawr_AudioStreamState_New,
-    rawr_AudioStreamState_Ready,
-    rawr_AudioStreamState_Started,
-    rawr_AudioStreamState_Playing,
-    rawr_AudioStreamState_Stopped,
-} rawr_AudioStreamState;
-
 typedef struct rawr_AudioDevice rawr_AudioDevice;
 
 typedef struct rawr_AudioStream rawr_AudioStream;
