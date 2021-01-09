@@ -62,8 +62,11 @@ rawr_AudioDevice *opus_outDevice;
 rawr_Codec *opus_decoder;
 rawr_AudioStream *opus_stream = NULL;
 mn_atomic_t opus_thread_stopping = MN_ATOMIC_INIT(0);
+mn_atomic_t opus_recv_count = MN_ATOMIC_INIT(0);
 
 uint64_t rtp_bytes_sent, rtp_wait_ns, rtp_tstamp_last;
+
+static void terminate(void);
 
 void rtp_session_send_thread(void *arg)
 {
@@ -74,7 +77,7 @@ void rtp_session_send_thread(void *arg)
     int len, numBytes, sampleCount;
     char *sampleBlock = NULL;
     int frame_size = rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms);
-    uint64_t bytes_sent, wait_ns, tstamp, tstamp_last;
+    uint64_t bytes_sent, wait_ns, tstamp, tstamp_last, recv_count, last_recv_count, recv_stasis;
     uint8_t rtp_type = 0x74;
     if (re_receiver) rtp_type = 0x66;
 
@@ -105,6 +108,9 @@ void rtp_session_send_thread(void *arg)
 
     RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(stream));
 
+    recv_stasis = 0;
+    last_recv_count = recv_count = mn_atomic_load(&opus_recv_count);
+
     wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
     bytes_sent = 0;
     tstamp_last = mn_tstamp();
@@ -127,15 +133,35 @@ void rtp_session_send_thread(void *arg)
 
         tstamp = mn_tstamp();
         if ((tstamp - tstamp_last) > wait_ns) {
-            mn_log_warning("send rate: %.2f KB/s", (double)bytes_sent / 1024.0);
-            tstamp_last = tstamp;
+            mn_log_trace("send rate: %.2f KB/s", (double)bytes_sent / 1024.0);
+            tstamp_last += wait_ns;
             bytes_sent = 0;
+
+            recv_count = mn_atomic_load(&opus_recv_count);
+            if (recv_count == last_recv_count) {
+                recv_stasis++;
+            } else {
+                last_recv_count = recv_count;
+                recv_stasis = 0;
+            }
+
+            if (recv_stasis >= 3) {
+                mn_atomic_store(&opus_thread_stopping, 1);
+                rawr_AudioStream_Stop(stream);
+                rawr_AudioStream_Stop(opus_stream);
+                terminate();
+                re_cancel();
+            }
         }
     }
+
+    mem_deref(re_mb);
 
     return;
 
 cleanup:
+
+    mem_deref(re_mb);
 
     mn_log_error("error in sending thread");
 }
@@ -143,6 +169,7 @@ cleanup:
 /* terminate */
 static void terminate(void)
 {
+    mn_log_warning("called");
     /* terminate session */
     re_sess = mem_deref(re_sess);
 
@@ -205,8 +232,8 @@ static void rawr_rtp_handler(const struct sa *src, const struct rtp_header *hdr,
     rtp_bytes_sent += mbuf_get_left(mb) + UDP_OVERHEAD_BYTES;
     uint64_t tstamp = mn_tstamp();
     if ((tstamp - rtp_tstamp_last) > rtp_wait_ns) {
-        mn_log_warning("recv rate: %.2f KB/s", (double)rtp_bytes_sent / 1024.0);
-        rtp_tstamp_last = tstamp;
+        mn_log_trace("recv rate: %.2f KB/s", (double)rtp_bytes_sent / 1024.0);
+        rtp_tstamp_last += rtp_wait_ns;
         rtp_bytes_sent = 0;
     }
 
@@ -215,6 +242,8 @@ static void rawr_rtp_handler(const struct sa *src, const struct rtp_header *hdr,
     int sampleCount = 0;
     while ((sampleCount = rawr_AudioStream_Write(opus_stream, opus_outbuf)) == 0) {}
     RAWR_GUARD_CLEANUP(sampleCount < 0);
+
+    mn_atomic_store_fetch_add(&opus_recv_count, 1, MN_ATOMIC_ACQ_REL);
 
     return;
 
@@ -228,7 +257,7 @@ static void rtcp_handler(const struct sa *src, struct rtcp_msg *msg, void *arg)
     (void)src;
     (void)msg;
     (void)arg;
-    //re_printf("rtcp: recv %s from %J\n", rtcp_type_name(msg->hdr.pt), src);
+    //mn_log_info("rtcp: recv %s from %J", rtcp_type_name(msg->hdr.pt), src);
 }
 
 /* called when challenged for credentials */
@@ -252,15 +281,15 @@ static void update_media(void)
     //memcpy(&re_remote_addr, sdp_media_raddr(re_sdp_media), sizeof(re_remote_addr));
     re_remote_port = ntohs(sdp_media_raddr(re_sdp_media)->u.in.sin_port);
     re_remote_ip = inet_ntoa(sdp_media_raddr(re_sdp_media)->u.in.sin_addr);
-    re_printf("SDP peer address: %s:%u\n", re_remote_ip, re_remote_port);
+    mn_log_info("SDP peer address: %s:%u", re_remote_ip, re_remote_port);
 
     fmt = sdp_media_rformat(re_sdp_media, "opus");
     if (!fmt) {
-        re_printf("no common media format found\n");
+        mn_log_info("no common media format found");
         return;
     }
 
-    re_printf("SDP media format: %s/%u/%u (payload type: %u)\n", fmt->name, fmt->srate, fmt->ch, fmt->pt);
+    mn_log_info("SDP media format: %s/%u/%u (payload type: %u)", fmt->name, fmt->srate, fmt->ch, fmt->pt);
 }
 
 /*
@@ -273,19 +302,21 @@ static int offer_handler(struct mbuf **mbp, const struct sip_msg *msg, void *arg
     int err;
     (void)arg;
 
+    mn_log_warning("called");
+
     if (got_offer) {
 
         err = sdp_decode(re_sdp, msg->mb, true);
         if (err) {
-            re_fprintf(stderr, "unable to decode SDP offer: %s\n", strerror(err));
+            mn_log_error("unable to decode SDP offer: %s", strerror(err));
             return err;
         }
 
-        re_printf("SDP offer received\n");
+        mn_log_info("SDP offer received");
         re_receiver = 0;
         update_media();
     } else {
-        re_printf("sending SDP offer\n");
+        mn_log_info("sending SDP offer");
     }
 
     return sdp_encode(mbp, re_sdp, !got_offer);
@@ -297,11 +328,11 @@ static int answer_handler(const struct sip_msg *msg, void *arg)
     int err;
     (void)arg;
 
-    re_printf("SDP answer received\n");
+    mn_log_warning("called: SDP answer received");
 
     err = sdp_decode(re_sdp, msg->mb, false);
     if (err) {
-        re_fprintf(stderr, "unable to decode SDP answer: %s\n", strerror(err));
+        mn_log_error("unable to decode SDP answer: %s", strerror(err));
         return err;
     }
     re_receiver = 0;
@@ -315,7 +346,7 @@ static void progress_handler(const struct sip_msg *msg, void *arg)
 {
     (void)arg;
 
-    re_printf("session progress: %u %r\n", msg->scode, &msg->reason);
+    mn_log_info("session progress: %u %r", msg->scode, &msg->reason);
 }
 
 /* called when the session is established */
@@ -326,7 +357,7 @@ static void establish_handler(const struct sip_msg *msg, void *arg)
 
     mn_thread_launch(&thread_recv, rtp_session_send_thread, NULL);
 
-    re_printf("session established\n");
+    mn_log_info("session established");
 }
 
 /* called when the session fails to connect or is terminated from peer */
@@ -335,9 +366,9 @@ static void close_handler(int err, const struct sip_msg *msg, void *arg)
     (void)arg;
 
     if (err)
-        re_printf("session closed: %s\n", strerror(err));
+        mn_log_info("session closed: %s", strerror(err));
     else
-        re_printf("session closed: %u %r\n", msg->scode, &msg->reason);
+        mn_log_info("session closed: %u %r", msg->scode, &msg->reason);
 
     terminate();
 }
@@ -349,6 +380,8 @@ static void connect_handler(const struct sip_msg *msg, void *arg)
     bool got_offer;
     int err;
     (void)arg;
+
+    mn_log_warning("called");
 
     if (re_sess) {
         /* Already in a call */
@@ -363,7 +396,7 @@ static void connect_handler(const struct sip_msg *msg, void *arg)
 
         err = sdp_decode(re_sdp, msg->mb, true);
         if (err) {
-            re_fprintf(stderr, "unable to decode SDP offer: %s\n", strerror(err));
+            mn_log_error("unable to decode SDP offer: %s", strerror(err));
             goto cleanup;
         }
 
@@ -374,7 +407,7 @@ static void connect_handler(const struct sip_msg *msg, void *arg)
     /* Encode SDP */
     err = sdp_encode(&mb, re_sdp, !got_offer);
     if (err) {
-        re_fprintf(stderr, "unable to encode SDP: %s\n", strerror(err));
+        mn_log_error("unable to encode SDP: %s", strerror(err));
         goto cleanup;
     }
 
@@ -382,7 +415,7 @@ static void connect_handler(const struct sip_msg *msg, void *arg)
     err = sipsess_accept(&re_sess, re_sess_sock, msg, 200, "OK", re_name, "application/sdp", mb, auth_handler, NULL, false, offer_handler, answer_handler, establish_handler, NULL, NULL, close_handler, NULL, NULL);
     mem_deref(mb); /* free SDP buffer */
     if (err) {
-        re_fprintf(stderr, "session accept error: %s\n", strerror(err));
+        mn_log_error("session accept error: %s", strerror(err));
         goto cleanup;
     }
 
@@ -390,7 +423,7 @@ cleanup:
     if (err) {
         (void)sip_treply(NULL, re_sip, msg, 500, strerror(err));
     } else {
-        re_printf("accepting incoming call from <%r>\n", &msg->from.auri);
+        mn_log_info("accepting incoming call from <%r>", &msg->from.auri);
         mn_thread_launch(&thread_recv, rtp_session_send_thread, NULL);
     }
 }
@@ -400,16 +433,20 @@ static void register_handler(int err, const struct sip_msg *msg, void *arg)
 {
     (void)arg;
 
+    mn_log_warning("called");
+
     if (err)
-        re_printf("register error: %s\n", strerror(err));
+        mn_log_info("register error: %s", strerror(err));
     else
-        re_printf("register reply: %u %r\n", msg->scode, &msg->reason);
+        mn_log_info("register reply: %u %r", msg->scode, &msg->reason);
 }
 
 /* called when all sip transactions are completed */
 static void exit_handler(void *arg)
 {
     (void)arg;
+
+    mn_log_warning("called");
 
     /* stop libre main loop */
     re_cancel();
@@ -418,7 +455,7 @@ static void exit_handler(void *arg)
 /* called upon reception of SIGINT, SIGALRM or SIGTERM */
 static void signal_handler(int sig)
 {
-    re_printf("terminating on signal %d...\n", sig);
+    mn_log_info("terminating on signal %d...", sig);
 
     terminate();
 }
@@ -439,9 +476,6 @@ int main(int argc, char *argv[])
     rawr_Audio_Setup();
 
     mn_log_setup();
-
-    err = Pa_Initialize();
-    if (err != paNoError) return -1;
 
     mn_log_trace("Using %s [0x%x]", srtp_get_version_string(), srtp_get_version());
 
@@ -473,28 +507,28 @@ int main(int argc, char *argv[])
     /* fetch list of DNS server IP addresses */
     err = dns_srv_get(NULL, 0, nsv, &nsc);
     if (err) {
-        re_fprintf(stderr, "unable to get dns servers: %s\n", strerror(err));
+        mn_log_error("unable to get dns servers: %s", strerror(err));
         goto cleanup;
     }
 
     /* create DNS client */
     err = dnsc_alloc(&dnsc, NULL, nsv, nsc);
     if (err) {
-        re_fprintf(stderr, "unable to create dns client: %s\n", strerror(err));
+        mn_log_error("unable to create dns client: %s", strerror(err));
         goto cleanup;
     }
 
     /* create SIP stack instance */
     err = sip_alloc(&re_sip, dnsc, 32, 32, 32, "RAWR v0.9.1", exit_handler, NULL);
     if (err) {
-        re_fprintf(stderr, "sip error: %s\n", strerror(err));
+        mn_log_error("sip error: %s", strerror(err));
         goto cleanup;
     }
 
     /* fetch local IP address */
     err = net_default_source_addr_get(AF_INET, &laddr);
     if (err) {
-        re_fprintf(stderr, "local address error: %s\n", strerror(err));
+        mn_log_error("local address error: %s", strerror(err));
         goto cleanup;
     }
 
@@ -506,14 +540,14 @@ int main(int argc, char *argv[])
     err |= sip_transp_add_ext(re_sip, SIP_TRANSP_UDP, &ext_addr, &laddr);
     //err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
     if (err) {
-        re_fprintf(stderr, "transport error: %s\n", strerror(err));
+        mn_log_error("transport error: %s", strerror(err));
         goto cleanup;
     }
 
     /* create SIP session socket */
     err = sipsess_listen(&re_sess_sock, re_sip, 32, connect_handler, NULL);
     if (err) {
-        re_fprintf(stderr, "session listen error: %s\n", strerror(err));
+        mn_log_error("session listen error: %s", strerror(err));
         goto cleanup;
     }
 
@@ -521,31 +555,31 @@ int main(int argc, char *argv[])
     net_default_source_addr_get(AF_INET, &laddr);
     err = rtp_listen(&re_rtp, IPPROTO_UDP, &laddr, 16384, 32767, true, rawr_rtp_handler, rtcp_handler, NULL);
     if (err) {
-        re_fprintf(stderr, "rtp listen error: %m\n", err);
+        mn_log_error("rtp listen error: %m", err);
         goto cleanup;
     }
     re_local_port = sa_port(rtp_local(re_rtp));
-    re_printf("local RTP port is %u\n", sa_port(rtp_local(re_rtp)));
+    mn_log_info("local RTP port is %u", sa_port(rtp_local(re_rtp)));
 
     sa_set_str(&laddr, re_ext_ip, re_local_port);
     /* create SDP session */
     err = sdp_session_alloc(&re_sdp, &laddr);
     if (err) {
-        re_fprintf(stderr, "sdp session error: %s\n", strerror(err));
+        mn_log_error("sdp session error: %s", strerror(err));
         goto cleanup;
     }
 
     /* add audio sdp media, using port from RTP socket */
     err = sdp_media_add(&re_sdp_media, re_sdp, "audio", sa_port(rtp_local(re_rtp)), "RTP/AVP");
     if (err) {
-        re_fprintf(stderr, "sdp media error: %s\n", strerror(err));
+        mn_log_error("sdp media error: %s", strerror(err));
         goto cleanup;
     }
 
     /* add opus sdp media format */
     err = sdp_format_add(NULL, re_sdp_media, false, "116", "opus", 48000, 2, NULL, NULL, NULL, false, NULL);
     if (err) {
-        re_fprintf(stderr, "sdp format error: %s\n", strerror(err));
+        mn_log_error("sdp format error: %s", strerror(err));
         goto cleanup;
     }
 
@@ -562,27 +596,69 @@ int main(int argc, char *argv[])
         /* create SDP offer */
         err = sdp_encode(&mb, re_sdp, true);
         if (err) {
-            re_fprintf(stderr, "sdp encode error: %s\n", strerror(err));
+            mn_log_error("sdp encode error: %s", strerror(err));
             goto cleanup;
         }
 
-        err = sipsess_connect(&re_sess, re_sess_sock, invite_uri, re_name, re_uri, re_name, NULL, 0, "application/sdp", mb, auth_handler, NULL, false, offer_handler, answer_handler, progress_handler, establish_handler, NULL, NULL, close_handler, NULL, NULL);
+        err = sipsess_connect(
+            &re_sess,
+            re_sess_sock,
+            invite_uri,
+            re_name,
+            re_uri,
+            re_name,
+            NULL,
+            0,
+            "application/sdp",
+            mb,
+            auth_handler,
+            NULL,
+            false,
+            offer_handler,
+            answer_handler,
+            progress_handler,
+            establish_handler,
+            NULL,
+            NULL,
+            close_handler,
+            NULL,
+            NULL
+        );
         mem_deref(mb); /* free SDP buffer */
         if (err) {
-            re_fprintf(stderr, "session connect error: %s\n", strerror(err));
+            mn_log_error("session connect error: %s", strerror(err));
             goto cleanup;
         }
 
-        re_printf("inviting <%s>...\n", invite_uri);
+        mn_log_info("inviting <%s>...", invite_uri);
     } else {
 
-        err = sipreg_register(&re_reg, re_sip, re_registrar, re_uri, NULL, re_uri, 60, re_name, NULL, 0, 0, auth_handler, NULL, false, register_handler, NULL, NULL, NULL);
+        err = sipreg_register(
+            &re_reg,
+            re_sip,
+            re_registrar,
+            re_uri,
+            NULL,
+            re_uri,
+            60,
+            re_name,
+            NULL,
+            0,
+            0,
+            auth_handler,
+            NULL,
+            false,
+            register_handler,
+            NULL,
+            NULL,
+            NULL
+        );
         if (err) {
-            re_fprintf(stderr, "register error: %s\n", strerror(err));
+            mn_log_error("register error: %s", strerror(err));
             goto cleanup;
         }
 
-        re_printf("registering <%s>...\n", re_uri);
+        mn_log_info("registering <%s>...", re_uri);
     }
 
     /* main loop */
