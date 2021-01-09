@@ -61,7 +61,6 @@ int main(void)
 
     int sampling_rate = 48000;
     int num_channels = 1;
-    int samp_count = 0;
     opus_int16 *inbuf = NULL;
     unsigned char packet[MAX_PACKET + 257];
     int len;
@@ -119,7 +118,7 @@ int main(void)
         /* decode data here for sanity check */
         RAWR_GUARD_CLEANUP(rawr_Codec_Decode(decoder, packet, len, outbuf) < 0);
 
-        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(stream, sampleBlock));
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(stream, outbuf));
     }
     mn_log_trace("Wire off.");
 

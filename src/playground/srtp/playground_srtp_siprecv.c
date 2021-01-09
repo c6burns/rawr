@@ -4,6 +4,7 @@
 
 #include "re.h"
 
+#include "mn/allocator.h"
 #include "mn/atomic.h"
 #include "mn/error.h"
 #include "mn/log.h"
@@ -73,6 +74,9 @@ opus_int16 *opus_inbuf;
 unsigned char opus_packet[MAX_PACKET + 257];
 opus_int16 *opus_outbuf;
 int opus_frame_size;
+rawr_AudioDevice *opus_outDevice;
+rawr_Codec *opus_decoder;
+rawr_AudioStream *opus_stream = NULL;
 
 uint64_t rtp_bytes_sent, rtp_wait_ns, rtp_tstamp_last;
 
@@ -170,6 +174,71 @@ static void terminate(void)
 
     /* wait for pending transactions to finish */
     sip_close(re_sip, false);
+}
+
+static void rawr_rtp_handler(const struct sa *src, const struct rtp_header *hdr, struct mbuf *mb, void *arg)
+{
+    (void)hdr;
+    (void)arg;
+
+    if (!pa_init) {
+        pa_init = 1;
+
+        uint8_t *silenceSamples = NULL;
+        int numBytes;
+
+        int frame_size_enum;
+        int application = OPUS_APPLICATION_VOIP;
+
+        opus_frame_size = rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms);
+        frame_size_enum = rawr_Codec_FrameSizeCode(rawr_CodecRate_48k, opus_frame_size);
+
+        numBytes = sizeof(*opus_inbuf) * opus_frame_size;
+        RAWR_GUARD_NULL_CLEANUP(opus_inbuf = MN_MEM_ACQUIRE(numBytes));
+        RAWR_GUARD_NULL_CLEANUP(opus_outbuf = MN_MEM_ACQUIRE(numBytes));
+        RAWR_GUARD_NULL_CLEANUP(silenceSamples = MN_MEM_ACQUIRE(numBytes));
+        memset(silenceSamples, SAMPLE_SILENCE, numBytes);
+
+        opus_outDevice = rawr_AudioDevice_DefaultOutput();
+
+        if (rawr_AudioStream_Setup(&opus_stream, rawr_AudioRate_48000, 1, opus_frame_size)) {
+            mn_log_error("rawr_AudioStream_Setup failed");
+        }
+
+        if (rawr_AudioStream_AddDevice(opus_stream, opus_outDevice)) {
+            mn_log_error("rawr_AudioStream_AddDevice failed on input");
+        }
+
+        RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&opus_decoder, rawr_CodecType_Decoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
+
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(opus_stream));
+
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(opus_stream, silenceSamples) < 0);
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(opus_stream, silenceSamples) < 0);
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(opus_stream, silenceSamples) < 0);
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(opus_stream, silenceSamples) < 0);
+
+        rtp_wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
+        rtp_bytes_sent = 0;
+        rtp_tstamp_last = mn_tstamp();
+    }
+
+    rtp_bytes_sent += mbuf_get_left(mb) + UDP_OVERHEAD_BYTES;
+    uint64_t tstamp = mn_tstamp();
+    if ((tstamp - rtp_tstamp_last) > rtp_wait_ns) {
+        mn_log_warning("recv rate: %.2f KB/s", (double)rtp_bytes_sent / 1024.0);
+        rtp_tstamp_last = tstamp;
+        rtp_bytes_sent = 0;
+    }
+
+    RAWR_GUARD_CLEANUP(rawr_Codec_Decode(opus_decoder, mbuf_buf(mb), mbuf_get_left(mb), opus_outbuf) < 0);
+
+    RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(opus_stream, opus_outbuf) < 0);
+
+    return;
+
+cleanup:
+    mn_log_error("error during recv");
 }
 
 /* called for every received RTP packet */
