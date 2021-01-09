@@ -130,7 +130,7 @@ void rtp_session_send_thread(void *arg)
     bytes_sent = 0;
     tstamp_last = mn_tstamp();
     while (1) {
-        RAWR_GUARD_CLEANUP(rawr_AudioStream_Read(stream, sampleBlock));
+        while(rawr_AudioStream_Read(stream, sampleBlock) <= 0);
 
         RAWR_GUARD_CLEANUP((len = rawr_Codec_Encode(encoder, sampleBlock, opus_packet)) < 0);
 
@@ -698,7 +698,7 @@ int main(int argc, char *argv[])
 
     /* create the RTP/RTCP socket */
     net_default_source_addr_get(AF_INET, &laddr);
-    err = rtp_listen(&re_rtp, IPPROTO_UDP, &laddr, 16384, 32767, true, rtp_handler, rtcp_handler, NULL);
+    err = rtp_listen(&re_rtp, IPPROTO_UDP, &laddr, 16384, 32767, true, rawr_rtp_handler, rtcp_handler, NULL);
     if (err) {
         re_fprintf(stderr, "rtp listen error: %m\n", err);
         goto cleanup;
@@ -731,9 +731,9 @@ int main(int argc, char *argv[])
     /* invite provided URI */
     if (1) {
         //const char *const invite_uri = "sip:1002@sip.serverlynx.net"; // c6 cell user
-        const char *const invite_uri = "sip:3300@sip.serverlynx.net"; // conference
+        //const char *const invite_uri = "sip:3300@sip.serverlynx.net"; // conference
         //const char *const invite_uri = "sip:9195@sip.serverlynx.net"; // 5s delay echo test
-        //const char *const invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
+        const char *const invite_uri = "sip:9196@sip.serverlynx.net"; // echo test
         //const char *const invite_uri = "sip:9197@sip.serverlynx.net"; // tone 1
         //const char *const invite_uri = "sip:9198@sip.serverlynx.net"; // tone 2
         struct mbuf *mb;

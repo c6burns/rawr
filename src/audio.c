@@ -451,8 +451,9 @@ int rawr_AudioStream_Read(rawr_AudioStream *stream, void *buffer)
 
     rawr_RingBuffer *rb = &rawr_AudioStream_Priv(stream)->rbFromDevice;
     if (rawr_RingBuffer_GetReadAvailable(rb) < stream->sampleCount) {
-        memset(buffer, 0, stream->sampleCount * sizeof(rawr_AudioSample));
-        return stream->sampleCount;
+        //memset(buffer, 0, stream->sampleCount * sizeof(rawr_AudioSample));
+        return 0;
+        //stream->sampleCount;
     }
 
     return rawr_RingBuffer_Read(rb, buffer, stream->sampleCount);
