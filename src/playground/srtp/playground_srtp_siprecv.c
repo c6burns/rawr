@@ -537,8 +537,8 @@ int main(int argc, char *argv[])
     sa_set_port(&laddr, 0);
 
     /* add supported SIP transports */
-    err |= sip_transp_add_ext(re_sip, SIP_TRANSP_UDP, &ext_addr, &laddr);
-    //err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
+    //err |= sip_transp_add_ext(re_sip, SIP_TRANSP_UDP, &ext_addr, &laddr);
+    err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
     if (err) {
         mn_log_error("transport error: %s", strerror(err));
         goto cleanup;
@@ -561,7 +561,7 @@ int main(int argc, char *argv[])
     re_local_port = sa_port(rtp_local(re_rtp));
     mn_log_info("local RTP port is %u", sa_port(rtp_local(re_rtp)));
 
-    sa_set_str(&laddr, re_ext_ip, re_local_port);
+    //sa_set_str(&laddr, re_ext_ip, re_local_port);
     /* create SDP session */
     err = sdp_session_alloc(&re_sdp, &laddr);
     if (err) {
