@@ -8,7 +8,7 @@ int rawr_Net_Setup()
     return libre_init();
 }
 
-void rawr_Net_Cleaup()
+void rawr_Net_Cleanup()
 {
     libre_close();
 }
