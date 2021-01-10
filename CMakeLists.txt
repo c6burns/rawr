@@ -180,8 +180,9 @@ endmacro()
 
 rawr_add_library(rawr
 	include/rawr/app.h
+    include/rawr/audio.h
 	include/rawr/buf.h
-	include/rawr/audio.h
+    include/rawr/call.h
     include/rawr/endpoint.h
     include/rawr/opus.h
     include/rawr/ring.h
@@ -189,8 +190,9 @@ rawr_add_library(rawr
 	include/rawr/term.h
     include/rawr/util.h
 	src/app.c
+    src/audio.c
 	src/buf.c
-	src/audio.c
+    src/call.c
     src/endpoint.c
     src/opus.c
     src/ring.c
@@ -229,6 +231,10 @@ endif()
 # playground: portaudio + opus
 if (TARGET portaudio AND TARGET opus)
     rawr_add_executable(playground_pa src/playground/pa/playground_pa.c)
+endif()
+
+if (TARGET portaudio AND TARGET opus AND TARGET re AND TARGET mn)
+    rawr_add_executable(playground_call src/playground/call/playground_call.c)
 endif()
 
 # playground: portaudio
