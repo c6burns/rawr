@@ -184,6 +184,7 @@ rawr_add_library(rawr
 	include/rawr/buf.h
     include/rawr/call.h
     include/rawr/endpoint.h
+    include/rawr/net.h
     include/rawr/opus.h
     include/rawr/ring.h
     include/rawr/stun.h
@@ -194,6 +195,7 @@ rawr_add_library(rawr
 	src/buf.c
     src/call.c
     src/endpoint.c
+    src/net.c
     src/opus.c
     src/ring.c
     src/stun.c
