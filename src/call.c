@@ -743,3 +743,17 @@ int rawr_Call_BlockOnCall(rawr_Call *call)
     }
     return rawr_Success;
 }
+
+// --------------------------------------------------------------------------------------------------------------
+double rawr_Call_InputLevel(rawr_Call *call)
+{
+    RAWR_ASSERT(call && call->stream);
+    return rawr_AudioStream_InputLevel(call->stream);
+}
+
+// --------------------------------------------------------------------------------------------------------------
+double rawr_Call_OutputLevel(rawr_Call *call)
+{
+    RAWR_ASSERT(call && call->stream);
+    return rawr_AudioStream_OutputLevel(call->stream);
+}

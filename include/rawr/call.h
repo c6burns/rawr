@@ -30,4 +30,7 @@ int rawr_Call_Stop(rawr_Call *call);
 
 int rawr_Call_BlockOnCall(rawr_Call *call);
 
+double rawr_Call_InputLevel(rawr_Call *call);
+double rawr_Call_OutputLevel(rawr_Call *call);
+
 #endif
