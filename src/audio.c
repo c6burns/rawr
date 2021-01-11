@@ -301,8 +301,6 @@ int rawr_AudioStream_AudioCallback(const void *inputBuffer, void *outputBuffer, 
     outputLevel = max(20.0, min(200.0, outputDb * -1.0)) - 20.0;
     outputLevel = 1.0 - (outputLevel / 180.0);
 
-    mn_log_trace("%0.2f - %0.2f", inputLevel, outputLevel);
-
     /* store in atomics for frontend retrival */
     mn_atomic_store(&stream->inputLevel, inputLevel * RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER);
     mn_atomic_store(&stream->outputLevel, outputLevel * RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER);

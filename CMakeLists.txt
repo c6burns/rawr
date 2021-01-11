@@ -236,7 +236,7 @@ if (TARGET portaudio AND TARGET opus)
 endif()
 
 if (TARGET portaudio AND TARGET opus AND TARGET re AND TARGET mn)
-    rawr_add_executable(playground_call src/playground/call/playground_call.c)
+    rawr_add_executable(rawr_demo src/playground/call/playground_call.c res/rawr.rc)
 endif()
 
 # playground: portaudio
