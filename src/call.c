@@ -712,15 +712,19 @@ int rawr_Call_Start(rawr_Call *call)
 // --------------------------------------------------------------------------------------------------------------
 int rawr_Call_Stop(rawr_Call *call)
 {
-    rawr_Call_SetState(call, rawr_CallState_Stopping);
     RAWR_ASSERT(call);
+
+    rawr_Call_SetExiting(call);
+
+    mn_thread_join(&call->sipThread);
+
     return rawr_Success;
 }
 
 // --------------------------------------------------------------------------------------------------------------
 int rawr_Call_BlockOnCall(rawr_Call *call)
 {
-    while (!rawr_Call_Exiting(call)) {
+    while (1) {
         int exitLoop = 1;
 
         rawr_CallState state = rawr_Call_State(call);
