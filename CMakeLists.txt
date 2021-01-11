@@ -20,7 +20,6 @@ set(RAWR_AWSCOMMON ON CACHE BOOL "Builds and links aws-c-common as a dependency"
 set(RAWR_LIBUV ON CACHE BOOL "Builds and links libuv as a dependency")
 set(RAWR_MN ON CACHE BOOL "Builds and links libmn as a dependency")
 set(RAWR_OPUS ON CACHE BOOL "Builds and links opus as a dependency")
-set(RAWR_STROPHE OFF CACHE BOOL "Builds and links libstrophe as a dependency")
 set(RAWR_RE ON CACHE BOOL "Builds and links libre as a dependency")
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -145,13 +144,6 @@ if (RAWR_LIBSRTP)
 	add_subdirectory(deps/libsrtp)
 	list(APPEND RAWR_LINK_LIBS srtp2)
 	list(APPEND RAWR_INCLUDE_DIRS deps/libsrtp/include deps/libsrtp/test ${CMAKE_BINARY_DIR}/deps/libsrtp)
-endif()
-
-# libstrophe-xep
-if (RAWR_STROPHE)
-	add_subdirectory(deps/libstrophe-xep)
-    list(APPEND RAWR_LINK_LIBS strophe)
-	list(APPEND RAWR_INCLUDE_DIRS deps/libstrophe)
 endif()
 
 # re
@@ -283,11 +275,6 @@ if (TARGET portaudio AND TARGET opus AND TARGET srtp2)
 		target_compile_definitions(playground_srtp_recv PRIVATE HAVE_WINSOCK2_H)
         target_compile_definitions(playground_srtp_siprecv PRIVATE HAVE_WINSOCK2_H)
 	endif()
-endif()
-
-# playground: strophe
-if (TARGET strophe)
-    rawr_add_executable(playground_strophe src/playground/strophe/playground_strophe.c)
 endif()
 
 # playground: libwebsockets
