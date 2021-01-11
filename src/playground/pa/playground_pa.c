@@ -65,25 +65,18 @@ void threaded_encode_fn(rawr_AudioStream *stream)
 int main(void)
 {
     char *sampleBlock = NULL;
-    int i;
     int numBytes;
     int numChannels = 1;
-
-    OpusEncoder *enc;
-    OpusDecoder *dec;
-    int j;
     int err;
 
     int sampling_rate = 48000;
     int num_channels = 1;
-    int application = OPUS_APPLICATION_VOIP;
 
     int sampleCount = 0;
     opus_int16 *inbuf = NULL;
     unsigned char packet[MAX_PACKET + 257];
     int len;
     opus_int16 *outbuf = NULL;
-    int out_samples;
     int ret = 0;
 
     int frame_size_ms_x2 = 40;

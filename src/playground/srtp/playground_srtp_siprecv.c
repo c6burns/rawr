@@ -1,40 +1,27 @@
-#include "rawr/error.h"
+#include "rawr/audio.h"
 #include "rawr/endpoint.h"
+#include "rawr/error.h"
+#include "rawr/opus.h"
 
-#include "re.h"
-
+#include "mn/allocator.h"
 #include "mn/atomic.h"
 #include "mn/error.h"
 #include "mn/log.h"
 #include "mn/thread.h"
 #include "mn/time.h"
+
 #include "playground_srtp.h"
 
+#include "re.h"
 #include "opus.h"
 #include "portaudio.h"
 #include "srtp.h"
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define UDP_OVERHEAD_BYTES 54
 #define MAX_PACKET (1500)
-#define SAMPLES (48000 * 30)
-#define SSAMPLES (SAMPLES / 3)
-#define MAX_FRAME_SAMP (5760)
-#define PI (3.141592653589793238462643f)
-
-/* #define SAMPLE_RATE  (17932) // Test failure to open with this value. */
-#define SAMPLE_RATE (48000)
-#define FRAMES_PER_BUFFER (960)
-#define NUM_SECONDS (10)
-/* #define DITHER_FLAG     (paDitherOff)  */
-#define DITHER_FLAG (0)
-
-#define PA_SAMPLE_TYPE paInt16
-#define SAMPLE_SIZE (2)
-#define SAMPLE_SILENCE (0)
-#define PRINTF_S_FORMAT "%d"
 
 static struct sipsess_sock *re_sess_sock; /* SIP session socket */
 static struct sdp_session *re_sdp;        /* SDP session        */
@@ -46,7 +33,7 @@ static struct rtp_sock *re_rtp;           /* RTP socket         */
 
 const char *re_registrar = "sip:sip.serverlynx.net";
 const char *re_uri = "sip:1001@serverlynx.net";
-const char *re_name = "Chris Burns";
+const char *re_name = "ChrisBurns";
 const char *re_user = "1001";
 const char *re_pass = "422423";
 char *re_ext_ip = NULL;
@@ -71,186 +58,68 @@ opus_int16 *opus_inbuf;
 unsigned char opus_packet[MAX_PACKET + 257];
 opus_int16 *opus_outbuf;
 int opus_frame_size;
+rawr_AudioDevice *opus_outDevice;
+rawr_Codec *opus_decoder;
+rawr_AudioStream *opus_stream = NULL;
+mn_atomic_t opus_thread_stopping = MN_ATOMIC_INIT(0);
+mn_atomic_t opus_recv_count = MN_ATOMIC_INIT(0);
 
 uint64_t rtp_bytes_sent, rtp_wait_ns, rtp_tstamp_last;
 
-void rtp_session_run_sip_sendrecv(void *arg)
-{
-    mn_log_warning("STARTING: %s:%u <-> %u", "0.0.0.0", re_local_port, re_remote_port);
-    //rtp_session_bothlegs_run(re_remote_ip, re_local_port, re_remote_port);
-    mn_log_warning("receiver thread exiting");
-}
+static void terminate(void);
 
 void rtp_session_send_thread(void *arg)
 {
-    PaStreamParameters inputParameters;
+    rawr_AudioDevice *inDevice;
+    rawr_Codec *encoder;
+    rawr_AudioStream *stream = NULL;
     PaError err;
-    const PaDeviceInfo *inputInfo;
-    const PaDeviceInfo *outputInfo;
+    int len, numBytes, sampleCount;
     char *sampleBlock = NULL;
-    int i;
-    int numBytes;
-    int numChannels;
+    int frame_size = rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms);
+    uint64_t bytes_sent, wait_ns, tstamp, tstamp_last, recv_count, last_recv_count, recv_stasis;
+    uint8_t rtp_type = 0x74;
+    if (re_receiver) rtp_type = 0x66;
 
-    int j;
+    mn_atomic_store(&opus_thread_stopping, 0);
 
-    int sampling_rate = 48000;
-    int num_channels = 1;
-    int application = OPUS_APPLICATION_VOIP;
-
-    int samp_count = 0;
-
-    int bitrate = OPUS_AUTO;
-    int force_channel = 1;
-    int vbr = 1;
-    int vbr_constraint = 1;
-    int complexity = 5;
-    int max_bw = OPUS_BANDWIDTH_FULLBAND;
-    int sig = OPUS_SIGNAL_VOICE;
-    int inband_fec = 0;
-    int pkt_loss = 1;
-    int lsb_depth = 8;
-    int pred_disabled = 0;
-    int dtx = 1;
-    int frame_size_ms_x2 = 40;
-    int frame_size = frame_size_ms_x2 * sampling_rate / 2000;
-    int frame_size_enum = get_frame_size_enum(frame_size, sampling_rate);
-
-    PaDeviceIndex inputDevice = -1, outputDevice = -1;
-    int numDevices;
-    const PaDeviceInfo *deviceInfo;
-
-    force_channel = 1;
-
-    /* Generate input data */
-    opus_inbuf = (opus_int16 *)malloc(sizeof(*opus_inbuf) * SSAMPLES);
-    //generate_music(inbuf, SSAMPLES / 2);
-
-    /* Allocate memory for output data */
-    opus_int16 *outbuf = (opus_int16 *)malloc(sizeof(*outbuf) * MAX_FRAME_SAMP * 3);
-
-    numDevices = Pa_GetDeviceCount();
-    if (numDevices < 0) {
-        printf("ERROR: Pa_GetDeviceCount returned 0x%x\n", numDevices);
-        err = numDevices;
-        return;
-    }
-
-    for (i = 0; i < numDevices; i++) {
-        deviceInfo = Pa_GetDeviceInfo(i);
-
-        /* Mark global and API specific default devices */
-        if (i == Pa_GetDefaultInputDevice()) {
-            inputDevice = i;
-        } else if (i == Pa_GetHostApiInfo(deviceInfo->hostApi)->defaultInputDevice) {
-            const PaHostApiInfo *hostInfo = Pa_GetHostApiInfo(deviceInfo->hostApi);
-            if (!inputDevice) inputDevice = i;
-        }
-    }
-
-    numChannels = 1;
-    if (inputDevice >= 0) {
-        inputInfo = Pa_GetDeviceInfo(inputDevice);
-        inputParameters.device = inputDevice;
-        inputParameters.channelCount = numChannels;
-        inputParameters.sampleFormat = PA_SAMPLE_TYPE;
-        inputParameters.suggestedLatency = inputInfo->defaultHighInputLatency;
-        inputParameters.hostApiSpecificStreamInfo = NULL;
-
-        mn_log_trace("Input device # %d.", inputParameters.device);
-        mn_log_trace("    Name: %s", inputInfo->name);
-        mn_log_trace("      LL: %g s", inputInfo->defaultLowInputLatency);
-        mn_log_trace("      HL: %g s", inputInfo->defaultHighInputLatency);
-    } else {
-        mn_log_error("Woah! No input device!");
-    }
-
-    /* -- setup opus -- */
-
-    opus_enc = opus_encoder_create(sampling_rate, num_channels, application, &err);
-    if (err != OPUS_OK || opus_enc == NULL) return;
-
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_BITRATE(bitrate)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_FORCE_CHANNELS(force_channel)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_VBR(vbr)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_VBR_CONSTRAINT(vbr_constraint)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_COMPLEXITY(complexity)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_MAX_BANDWIDTH(max_bw)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_SIGNAL(sig)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_INBAND_FEC(inband_fec)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_PACKET_LOSS_PERC(pkt_loss)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_LSB_DEPTH(lsb_depth)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_PREDICTION_DISABLED(pred_disabled)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_DTX(dtx)) != OPUS_OK) goto cleanup;
-    if (opus_encoder_ctl(opus_enc, OPUS_SET_EXPERT_FRAME_DURATION(frame_size_enum)) != OPUS_OK) goto cleanup;
-
-    mn_log_info("encoder_settings: %d kHz, %d ch, application: %d, "
-                "%d bps, force ch: %d, vbr: %d, vbr constraint: %d, complexity: %d, "
-                "max bw: %d, signal: %d, inband fec: %d, pkt loss: %d%%, lsb depth: %d, "
-                "pred disabled: %d, dtx: %d, (%d/2) ms\n",
-                sampling_rate / 1000,
-                num_channels,
-                application,
-                bitrate,
-                force_channel,
-                vbr,
-                vbr_constraint,
-                complexity,
-                max_bw,
-                sig,
-                inband_fec,
-                pkt_loss,
-                lsb_depth,
-                pred_disabled,
-                dtx,
-                frame_size_ms_x2);
-
-    err = Pa_OpenStream(
-        &pa_stream_read,
-        &inputParameters,
-        NULL,
-        SAMPLE_RATE,
-        frame_size,
-        paClipOff, /* we won't output out of range samples so don't bother clipping them */
-        NULL,      /* no callback, use blocking API */
-        NULL);     /* no callback, so no callback userData */
-    if (err != paNoError) return;
-
-    numBytes = FRAMES_PER_BUFFER * numChannels * SAMPLE_SIZE;
+    numBytes = frame_size * sizeof(rawr_AudioSample);
     sampleBlock = (char *)malloc(numBytes);
     if (sampleBlock == NULL) {
         mn_log_error("recv: Could not allocate record array.");
         return;
     }
-    memset(sampleBlock, SAMPLE_SILENCE, numBytes);
-
-    err = Pa_StartStream(pa_stream_read);
-    if (err != paNoError) return;
+    memset(sampleBlock, 0, numBytes);
 
     // set up buffer for rtmp packets
     re_mb = mbuf_alloc(MAX_PACKET);
 
-    uint64_t bytes_sent, wait_ns, tstamp, tstamp_last;
+    inDevice = rawr_AudioDevice_DefaultInput();
+
+    if (rawr_AudioStream_Setup(&stream, rawr_AudioRate_48000, 1, frame_size)) {
+        mn_log_error("rawr_AudioStream_Setup failed");
+    }
+
+    if (rawr_AudioStream_AddDevice(stream, inDevice)) {
+        mn_log_error("rawr_AudioStream_AddDevice failed on input");
+    }
+
+    RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&encoder, rawr_CodecType_Encoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
+
+    RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(stream));
+
+    recv_stasis = 0;
+    last_recv_count = recv_count = mn_atomic_load(&opus_recv_count);
+
     wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
     bytes_sent = 0;
     tstamp_last = mn_tstamp();
-    while (1) {
-        int len, ret, out_samples;
+    while (!mn_atomic_load(&opus_thread_stopping)) {
+        sampleCount = 0;
+        while ((sampleCount = rawr_AudioStream_Read(stream, sampleBlock)) == 0) {}
+        RAWR_GUARD_CLEANUP(sampleCount < 0);
 
-        err = Pa_ReadStream(pa_stream_read, sampleBlock, FRAMES_PER_BUFFER);
-        if (err) {
-            mn_log_error("send: error reading audio stream");
-            break;
-        }
-
-        /* Encode data, then decode for sanity check */
-        samp_count = 0;
-        len = opus_encode(opus_enc, (opus_int16 *)sampleBlock, frame_size, opus_packet, MAX_PACKET);
-        if (len < 0 || len > MAX_PACKET) {
-            mn_log_error("send: opus_encode() returned %d", len);
-            ret = -1;
-            break;
-        }
+        RAWR_GUARD_CLEANUP((len = rawr_Codec_Encode(encoder, sampleBlock, opus_packet)) < 0);
 
         mbuf_rewind(re_mb);
         mbuf_fill(re_mb, 0, RTP_HEADER_SIZE);
@@ -259,21 +128,40 @@ void rtp_session_send_thread(void *arg)
 
         bytes_sent += len + UDP_OVERHEAD_BYTES;
         re_ts += 960;
-        uint8_t rtp_type = 0x74;
-        if (re_receiver) rtp_type = 0x66;
+
         rtp_send(re_rtp, sdp_media_raddr(re_sdp_media), 0, 0, rtp_type, re_ts, re_mb);
 
         tstamp = mn_tstamp();
         if ((tstamp - tstamp_last) > wait_ns) {
-            mn_log_warning("send rate: %.2f KB/s", (double)bytes_sent / 1024.0);
-            tstamp_last = tstamp;
+            mn_log_trace("send rate: %.2f KB/s", (double)bytes_sent / 1024.0);
+            tstamp_last += wait_ns;
             bytes_sent = 0;
+
+            recv_count = mn_atomic_load(&opus_recv_count);
+            if (recv_count == last_recv_count) {
+                recv_stasis++;
+            } else {
+                last_recv_count = recv_count;
+                recv_stasis = 0;
+            }
+
+            if (recv_stasis >= 3) {
+                mn_atomic_store(&opus_thread_stopping, 1);
+                rawr_AudioStream_Stop(stream);
+                rawr_AudioStream_Stop(opus_stream);
+                terminate();
+                re_cancel();
+            }
         }
     }
+
+    mem_deref(re_mb);
 
     return;
 
 cleanup:
+
+    mem_deref(re_mb);
 
     mn_log_error("error in sending thread");
 }
@@ -281,18 +169,20 @@ cleanup:
 /* terminate */
 static void terminate(void)
 {
+    mn_log_warning("called");
     /* terminate session */
     re_sess = mem_deref(re_sess);
 
     /* terminate registration */
     re_reg = mem_deref(re_reg);
 
+    mn_atomic_store(&opus_thread_stopping, 1);
+
     /* wait for pending transactions to finish */
     sip_close(re_sip, false);
 }
 
-/* called for every received RTP packet */
-static void rtp_handler(const struct sa *src, const struct rtp_header *hdr, struct mbuf *mb, void *arg)
+static void rawr_rtp_handler(const struct sa *src, const struct rtp_header *hdr, struct mbuf *mb, void *arg)
 {
     (void)hdr;
     (void)arg;
@@ -300,154 +190,61 @@ static void rtp_handler(const struct sa *src, const struct rtp_header *hdr, stru
     if (!pa_init) {
         pa_init = 1;
 
-        PaStreamParameters outputParameters;
-        PaError err;
-        const PaDeviceInfo *inputInfo;
-        const PaDeviceInfo *outputInfo;
-        char *sampleBlock = NULL;
-        int i;
+        uint8_t *silenceSamples = NULL;
         int numBytes;
-        int numChannels;
 
-        int j;
-
-        int sampling_rate = 48000;
-        int num_channels = 1;
+        int frame_size_enum;
         int application = OPUS_APPLICATION_VOIP;
 
-        int samp_count = 0;
+        opus_frame_size = rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms);
+        frame_size_enum = rawr_Codec_FrameSizeCode(rawr_CodecRate_48k, opus_frame_size);
 
-        int bitrate = OPUS_AUTO;
-        int force_channel = 1;
-        int vbr = 1;
-        int vbr_constraint = 1;
-        int complexity = 5;
-        int max_bw = OPUS_BANDWIDTH_FULLBAND;
-        int sig = OPUS_SIGNAL_VOICE;
-        int inband_fec = 0;
-        int pkt_loss = 1;
-        int lsb_depth = 8;
-        int pred_disabled = 0;
-        int dtx = 1;
-        int frame_size_ms_x2 = 40;
-        int frame_size_enum;
+        numBytes = sizeof(*opus_inbuf) * opus_frame_size;
+        RAWR_GUARD_NULL_CLEANUP(opus_inbuf = MN_MEM_ACQUIRE(numBytes));
+        RAWR_GUARD_NULL_CLEANUP(opus_outbuf = MN_MEM_ACQUIRE(numBytes));
+        RAWR_GUARD_NULL_CLEANUP(silenceSamples = MN_MEM_ACQUIRE(numBytes));
+        memset(silenceSamples, 0, numBytes);
 
-        PaDeviceIndex inputDevice = -1, outputDevice = -1;
-        int numDevices;
-        const PaDeviceInfo *deviceInfo;
+        opus_outDevice = rawr_AudioDevice_DefaultOutput();
 
-        opus_frame_size = frame_size_ms_x2 * sampling_rate / 2000;
-        frame_size_enum = get_frame_size_enum(opus_frame_size, sampling_rate);
-        force_channel = 1;
-
-        /* Generate input data */
-        opus_inbuf = (opus_int16 *)malloc(sizeof(*opus_inbuf) * SSAMPLES);
-        //generate_music(inbuf, SSAMPLES / 2);
-
-        /* Allocate memory for output data */
-        opus_outbuf = (opus_int16 *)malloc(sizeof(*opus_outbuf) * MAX_FRAME_SAMP * 3);
-
-        numDevices = Pa_GetDeviceCount();
-        if (numDevices < 0) {
-            printf("ERROR: Pa_GetDeviceCount returned 0x%x\n", numDevices);
-            err = numDevices;
-            return;
+        if (rawr_AudioStream_Setup(&opus_stream, rawr_AudioRate_48000, 1, opus_frame_size)) {
+            mn_log_error("rawr_AudioStream_Setup failed");
         }
 
-        for (i = 0; i < numDevices; i++) {
-            deviceInfo = Pa_GetDeviceInfo(i);
-
-            if (i == Pa_GetDefaultOutputDevice()) {
-                outputDevice = i;
-            } else if (i == Pa_GetHostApiInfo(deviceInfo->hostApi)->defaultOutputDevice) {
-                const PaHostApiInfo *hostInfo = Pa_GetHostApiInfo(deviceInfo->hostApi);
-                if (!outputDevice) outputDevice = i;
-            }
+        if (rawr_AudioStream_AddDevice(opus_stream, opus_outDevice)) {
+            mn_log_error("rawr_AudioStream_AddDevice failed on input");
         }
 
-        mn_log_trace("sizeof(int) = %lu", sizeof(int));
-        mn_log_trace("sizeof(long) = %lu", sizeof(long));
+        RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&opus_decoder, rawr_CodecType_Decoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
 
-        //numChannels = inputInfo->maxInputChannels < outputInfo->maxOutputChannels
-        //                  ? inputInfo->maxInputChannels
-        //                  : outputInfo->maxOutputChannels;
-        numChannels = 1;
-        mn_log_trace("Num channels = %d.", numChannels);
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(opus_stream));
 
-        if (outputDevice >= 0) {
-            outputInfo = Pa_GetDeviceInfo(outputDevice);
-            outputParameters.device = outputDevice;
-            outputParameters.channelCount = numChannels;
-            outputParameters.sampleFormat = PA_SAMPLE_TYPE;
-            outputParameters.suggestedLatency = outputInfo->defaultHighOutputLatency;
-            outputParameters.hostApiSpecificStreamInfo = NULL;
-
-            mn_log_trace("Output device # %d.", outputParameters.device);
-
-            mn_log_trace("   Name: %s", outputInfo->name);
-            mn_log_trace("     LL: %g s", outputInfo->defaultLowOutputLatency);
-            mn_log_trace("     HL: %g s", outputInfo->defaultHighOutputLatency);
-        }
-
-        /* -- setup opus -- */
-
-        opus_dec = opus_decoder_create(sampling_rate, num_channels, &err);
-        if (err != OPUS_OK || opus_dec == NULL) return;
-
-        err = Pa_OpenStream(
-            &pa_stream_write,
-            NULL,
-            &outputParameters,
-            SAMPLE_RATE,
-            opus_frame_size,
-            paClipOff, /* we won't output out of range samples so don't bother clipping them */
-            NULL,      /* no callback, use blocking API */
-            NULL);     /* no callback, so no callback userData */
-        if (err != paNoError) return;
-
-        numBytes = FRAMES_PER_BUFFER * numChannels * SAMPLE_SIZE;
-        sampleBlock = (char *)malloc(numBytes);
-        if (sampleBlock == NULL) {
-            mn_log_error("recv: Could not allocate record array.");
-            return;
-        }
-        memset(sampleBlock, SAMPLE_SILENCE, numBytes);
-
-        err = Pa_StartStream(pa_stream_write);
-        if (err != paNoError) return;
-
-        for (int primer = 0; primer < 4; primer++) {
-            err = Pa_WriteStream(pa_stream_write, sampleBlock, FRAMES_PER_BUFFER);
-            if (err) return;
-        }
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(opus_stream, silenceSamples) < 0);
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(opus_stream, silenceSamples) < 0);
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(opus_stream, silenceSamples) < 0);
+        RAWR_GUARD_CLEANUP(rawr_AudioStream_Write(opus_stream, silenceSamples) < 0);
 
         rtp_wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
         rtp_bytes_sent = 0;
         rtp_tstamp_last = mn_tstamp();
     }
 
-    //re_printf("rtp: recv %zu bytes from %J\n", mbuf_get_left(mb), src);
     rtp_bytes_sent += mbuf_get_left(mb) + UDP_OVERHEAD_BYTES;
     uint64_t tstamp = mn_tstamp();
     if ((tstamp - rtp_tstamp_last) > rtp_wait_ns) {
-        mn_log_warning("recv rate: %.2f KB/s", (double)rtp_bytes_sent / 1024.0);
-        rtp_tstamp_last = tstamp;
+        mn_log_trace("recv rate: %.2f KB/s", (double)rtp_bytes_sent / 1024.0);
+        rtp_tstamp_last += rtp_wait_ns;
         rtp_bytes_sent = 0;
     }
 
-    {
-        int out_samples, ret;
+    RAWR_GUARD_CLEANUP(rawr_Codec_Decode(opus_decoder, mbuf_buf(mb), mbuf_get_left(mb), opus_outbuf) < 0);
 
-        out_samples = opus_decode(opus_dec, mbuf_buf(mb), mbuf_get_left(mb), opus_outbuf, MAX_FRAME_SAMP, 0);
-        if (out_samples != opus_frame_size) {
-            mn_log_error("recv: opus_decode() returned %d", out_samples);
-            goto cleanup;
-        }
+    int sampleCount = 0;
+    while ((sampleCount = rawr_AudioStream_Write(opus_stream, opus_outbuf)) == 0) {}
+    RAWR_GUARD_CLEANUP(sampleCount < 0);
 
-        if (Pa_WriteStream(pa_stream_write, opus_outbuf, FRAMES_PER_BUFFER)) {
-            goto cleanup;
-        }
-    }
+    mn_atomic_store_fetch_add(&opus_recv_count, 1, MN_ATOMIC_ACQ_REL);
+
     return;
 
 cleanup:
@@ -457,9 +254,10 @@ cleanup:
 /* called for every received RTCP packet */
 static void rtcp_handler(const struct sa *src, struct rtcp_msg *msg, void *arg)
 {
+    (void)src;
+    (void)msg;
     (void)arg;
-
-    re_printf("rtcp: recv %s from %J\n", rtcp_type_name(msg->hdr.pt), src);
+    //mn_log_info("rtcp: recv %s from %J", rtcp_type_name(msg->hdr.pt), src);
 }
 
 /* called when challenged for credentials */
@@ -483,15 +281,15 @@ static void update_media(void)
     //memcpy(&re_remote_addr, sdp_media_raddr(re_sdp_media), sizeof(re_remote_addr));
     re_remote_port = ntohs(sdp_media_raddr(re_sdp_media)->u.in.sin_port);
     re_remote_ip = inet_ntoa(sdp_media_raddr(re_sdp_media)->u.in.sin_addr);
-    re_printf("SDP peer address: %s:%u\n", re_remote_ip, re_remote_port);
+    mn_log_info("SDP peer address: %s:%u", re_remote_ip, re_remote_port);
 
     fmt = sdp_media_rformat(re_sdp_media, "opus");
     if (!fmt) {
-        re_printf("no common media format found\n");
+        mn_log_info("no common media format found");
         return;
     }
 
-    re_printf("SDP media format: %s/%u/%u (payload type: %u)\n", fmt->name, fmt->srate, fmt->ch, fmt->pt);
+    mn_log_info("SDP media format: %s/%u/%u (payload type: %u)", fmt->name, fmt->srate, fmt->ch, fmt->pt);
 }
 
 /*
@@ -504,19 +302,21 @@ static int offer_handler(struct mbuf **mbp, const struct sip_msg *msg, void *arg
     int err;
     (void)arg;
 
+    mn_log_warning("called");
+
     if (got_offer) {
 
         err = sdp_decode(re_sdp, msg->mb, true);
         if (err) {
-            re_fprintf(stderr, "unable to decode SDP offer: %s\n", strerror(err));
+            mn_log_error("unable to decode SDP offer: %s", strerror(err));
             return err;
         }
 
-        re_printf("SDP offer received\n");
+        mn_log_info("SDP offer received");
         re_receiver = 0;
         update_media();
     } else {
-        re_printf("sending SDP offer\n");
+        mn_log_info("sending SDP offer");
     }
 
     return sdp_encode(mbp, re_sdp, !got_offer);
@@ -528,11 +328,11 @@ static int answer_handler(const struct sip_msg *msg, void *arg)
     int err;
     (void)arg;
 
-    re_printf("SDP answer received\n");
+    mn_log_warning("called: SDP answer received");
 
     err = sdp_decode(re_sdp, msg->mb, false);
     if (err) {
-        re_fprintf(stderr, "unable to decode SDP answer: %s\n", strerror(err));
+        mn_log_error("unable to decode SDP answer: %s", strerror(err));
         return err;
     }
     re_receiver = 0;
@@ -546,7 +346,7 @@ static void progress_handler(const struct sip_msg *msg, void *arg)
 {
     (void)arg;
 
-    re_printf("session progress: %u %r\n", msg->scode, &msg->reason);
+    mn_log_info("session progress: %u %r", msg->scode, &msg->reason);
 }
 
 /* called when the session is established */
@@ -557,7 +357,7 @@ static void establish_handler(const struct sip_msg *msg, void *arg)
 
     mn_thread_launch(&thread_recv, rtp_session_send_thread, NULL);
 
-    re_printf("session established\n");
+    mn_log_info("session established");
 }
 
 /* called when the session fails to connect or is terminated from peer */
@@ -566,9 +366,9 @@ static void close_handler(int err, const struct sip_msg *msg, void *arg)
     (void)arg;
 
     if (err)
-        re_printf("session closed: %s\n", strerror(err));
+        mn_log_info("session closed: %s", strerror(err));
     else
-        re_printf("session closed: %u %r\n", msg->scode, &msg->reason);
+        mn_log_info("session closed: %u %r", msg->scode, &msg->reason);
 
     terminate();
 }
@@ -580,6 +380,8 @@ static void connect_handler(const struct sip_msg *msg, void *arg)
     bool got_offer;
     int err;
     (void)arg;
+
+    mn_log_warning("called");
 
     if (re_sess) {
         /* Already in a call */
@@ -594,8 +396,8 @@ static void connect_handler(const struct sip_msg *msg, void *arg)
 
         err = sdp_decode(re_sdp, msg->mb, true);
         if (err) {
-            re_fprintf(stderr, "unable to decode SDP offer: %s\n", strerror(err));
-            goto out;
+            mn_log_error("unable to decode SDP offer: %s", strerror(err));
+            goto cleanup;
         }
 
         re_receiver = 1;
@@ -605,23 +407,23 @@ static void connect_handler(const struct sip_msg *msg, void *arg)
     /* Encode SDP */
     err = sdp_encode(&mb, re_sdp, !got_offer);
     if (err) {
-        re_fprintf(stderr, "unable to encode SDP: %s\n", strerror(err));
-        goto out;
+        mn_log_error("unable to encode SDP: %s", strerror(err));
+        goto cleanup;
     }
 
     /* Answer incoming call */
     err = sipsess_accept(&re_sess, re_sess_sock, msg, 200, "OK", re_name, "application/sdp", mb, auth_handler, NULL, false, offer_handler, answer_handler, establish_handler, NULL, NULL, close_handler, NULL, NULL);
     mem_deref(mb); /* free SDP buffer */
     if (err) {
-        re_fprintf(stderr, "session accept error: %s\n", strerror(err));
-        goto out;
+        mn_log_error("session accept error: %s", strerror(err));
+        goto cleanup;
     }
 
-out:
+cleanup:
     if (err) {
         (void)sip_treply(NULL, re_sip, msg, 500, strerror(err));
     } else {
-        re_printf("accepting incoming call from <%r>\n", &msg->from.auri);
+        mn_log_info("accepting incoming call from <%r>", &msg->from.auri);
         mn_thread_launch(&thread_recv, rtp_session_send_thread, NULL);
     }
 }
@@ -631,16 +433,20 @@ static void register_handler(int err, const struct sip_msg *msg, void *arg)
 {
     (void)arg;
 
+    mn_log_warning("called");
+
     if (err)
-        re_printf("register error: %s\n", strerror(err));
+        mn_log_info("register error: %s", strerror(err));
     else
-        re_printf("register reply: %u %r\n", msg->scode, &msg->reason);
+        mn_log_info("register reply: %u %r", msg->scode, &msg->reason);
 }
 
 /* called when all sip transactions are completed */
 static void exit_handler(void *arg)
 {
     (void)arg;
+
+    mn_log_warning("called");
 
     /* stop libre main loop */
     re_cancel();
@@ -649,7 +455,7 @@ static void exit_handler(void *arg)
 /* called upon reception of SIGINT, SIGALRM or SIGTERM */
 static void signal_handler(int sig)
 {
-    re_printf("terminating on signal %d...\n", sig);
+    mn_log_info("terminating on signal %d...", sig);
 
     terminate();
 }
@@ -667,10 +473,9 @@ int main(int argc, char *argv[])
 
     rawr_Endpoint epStunServ, epExternal;
 
-    mn_log_setup();
+    rawr_Audio_Setup();
 
-    err = Pa_Initialize();
-    if (err != paNoError) return -1;
+    mn_log_setup();
 
     mn_log_trace("Using %s [0x%x]", srtp_get_version_string(), srtp_get_version());
 
@@ -688,8 +493,7 @@ int main(int argc, char *argv[])
 
     RAWR_GUARD_CLEANUP(libre_init());
 
-
-    rawr_Endpoint_SetBytes(&epStunServ, 74, 125, 197, 127, 19302);
+    rawr_Endpoint_SetBytes(&epStunServ, 3, 223, 157, 6, 3478);
 
     rawr_StunClient_BindingRequest(&epStunServ, &epExternal);
 
@@ -698,34 +502,33 @@ int main(int argc, char *argv[])
     rawr_Endpoint_String(&epExternal, &port, ipstr, 255);
     mn_log_info("Found external IP via STUN: %s", ipstr);
 
-
     nsc = ARRAY_SIZE(nsv);
 
     /* fetch list of DNS server IP addresses */
     err = dns_srv_get(NULL, 0, nsv, &nsc);
     if (err) {
-        re_fprintf(stderr, "unable to get dns servers: %s\n", strerror(err));
+        mn_log_error("unable to get dns servers: %s", strerror(err));
         goto cleanup;
     }
 
     /* create DNS client */
     err = dnsc_alloc(&dnsc, NULL, nsv, nsc);
     if (err) {
-        re_fprintf(stderr, "unable to create dns client: %s\n", strerror(err));
+        mn_log_error("unable to create dns client: %s", strerror(err));
         goto cleanup;
     }
 
     /* create SIP stack instance */
     err = sip_alloc(&re_sip, dnsc, 32, 32, 32, "RAWR v0.9.1", exit_handler, NULL);
     if (err) {
-        re_fprintf(stderr, "sip error: %s\n", strerror(err));
+        mn_log_error("sip error: %s", strerror(err));
         goto cleanup;
     }
 
     /* fetch local IP address */
     err = net_default_source_addr_get(AF_INET, &laddr);
     if (err) {
-        re_fprintf(stderr, "local address error: %s\n", strerror(err));
+        mn_log_error("local address error: %s", strerror(err));
         goto cleanup;
     }
 
@@ -734,49 +537,49 @@ int main(int argc, char *argv[])
     sa_set_port(&laddr, 0);
 
     /* add supported SIP transports */
-    err |= sip_transp_add_ext(re_sip, SIP_TRANSP_UDP, &ext_addr, &laddr);
-    //err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
+    //err |= sip_transp_add_ext(re_sip, SIP_TRANSP_UDP, &ext_addr, &laddr);
+    err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
     if (err) {
-        re_fprintf(stderr, "transport error: %s\n", strerror(err));
+        mn_log_error("transport error: %s", strerror(err));
         goto cleanup;
     }
 
     /* create SIP session socket */
     err = sipsess_listen(&re_sess_sock, re_sip, 32, connect_handler, NULL);
     if (err) {
-        re_fprintf(stderr, "session listen error: %s\n", strerror(err));
+        mn_log_error("session listen error: %s", strerror(err));
         goto cleanup;
     }
 
     /* create the RTP/RTCP socket */
     net_default_source_addr_get(AF_INET, &laddr);
-    err = rtp_listen(&re_rtp, IPPROTO_UDP, &laddr, 16384, 32767, true, rtp_handler, rtcp_handler, NULL);
+    err = rtp_listen(&re_rtp, IPPROTO_UDP, &laddr, 16384, 32767, true, rawr_rtp_handler, rtcp_handler, NULL);
     if (err) {
-        re_fprintf(stderr, "rtp listen error: %m\n", err);
+        mn_log_error("rtp listen error: %m", err);
         goto cleanup;
     }
     re_local_port = sa_port(rtp_local(re_rtp));
-    re_printf("local RTP port is %u\n", sa_port(rtp_local(re_rtp)));
+    mn_log_info("local RTP port is %u", sa_port(rtp_local(re_rtp)));
 
-    sa_set_str(&laddr, re_ext_ip, re_local_port);
+    //sa_set_str(&laddr, re_ext_ip, re_local_port);
     /* create SDP session */
     err = sdp_session_alloc(&re_sdp, &laddr);
     if (err) {
-        re_fprintf(stderr, "sdp session error: %s\n", strerror(err));
+        mn_log_error("sdp session error: %s", strerror(err));
         goto cleanup;
     }
 
     /* add audio sdp media, using port from RTP socket */
     err = sdp_media_add(&re_sdp_media, re_sdp, "audio", sa_port(rtp_local(re_rtp)), "RTP/AVP");
     if (err) {
-        re_fprintf(stderr, "sdp media error: %s\n", strerror(err));
+        mn_log_error("sdp media error: %s", strerror(err));
         goto cleanup;
     }
 
     /* add opus sdp media format */
     err = sdp_format_add(NULL, re_sdp_media, false, "116", "opus", 48000, 2, NULL, NULL, NULL, false, NULL);
     if (err) {
-        re_fprintf(stderr, "sdp format error: %s\n", strerror(err));
+        mn_log_error("sdp format error: %s", strerror(err));
         goto cleanup;
     }
 
@@ -793,27 +596,69 @@ int main(int argc, char *argv[])
         /* create SDP offer */
         err = sdp_encode(&mb, re_sdp, true);
         if (err) {
-            re_fprintf(stderr, "sdp encode error: %s\n", strerror(err));
+            mn_log_error("sdp encode error: %s", strerror(err));
             goto cleanup;
         }
 
-        err = sipsess_connect(&re_sess, re_sess_sock, invite_uri, re_name, re_uri, re_name, NULL, 0, "application/sdp", mb, auth_handler, NULL, false, offer_handler, answer_handler, progress_handler, establish_handler, NULL, NULL, close_handler, NULL, NULL);
+        err = sipsess_connect(
+            &re_sess,
+            re_sess_sock,
+            invite_uri,
+            re_name,
+            re_uri,
+            re_name,
+            NULL,
+            0,
+            "application/sdp",
+            mb,
+            auth_handler,
+            NULL,
+            false,
+            offer_handler,
+            answer_handler,
+            progress_handler,
+            establish_handler,
+            NULL,
+            NULL,
+            close_handler,
+            NULL,
+            NULL
+        );
         mem_deref(mb); /* free SDP buffer */
         if (err) {
-            re_fprintf(stderr, "session connect error: %s\n", strerror(err));
+            mn_log_error("session connect error: %s", strerror(err));
             goto cleanup;
         }
 
-        re_printf("inviting <%s>...\n", invite_uri);
+        mn_log_info("inviting <%s>...", invite_uri);
     } else {
 
-        err = sipreg_register(&re_reg, re_sip, re_registrar, re_uri, NULL, re_uri, 60, re_name, NULL, 0, 0, auth_handler, NULL, false, register_handler, NULL, NULL, NULL);
+        err = sipreg_register(
+            &re_reg,
+            re_sip,
+            re_registrar,
+            re_uri,
+            NULL,
+            re_uri,
+            60,
+            re_name,
+            NULL,
+            0,
+            0,
+            auth_handler,
+            NULL,
+            false,
+            register_handler,
+            NULL,
+            NULL,
+            NULL
+        );
         if (err) {
-            re_fprintf(stderr, "register error: %s\n", strerror(err));
+            mn_log_error("register error: %s", strerror(err));
             goto cleanup;
         }
 
-        re_printf("registering <%s>...\n", re_uri);
+        mn_log_info("registering <%s>...", re_uri);
     }
 
     /* main loop */
@@ -829,6 +674,8 @@ cleanup:
 
     /* free libre state */
     libre_close();
+
+    rawr_Audio_Cleanup();
 
     /* check for memory leaks */
     tmr_debug();

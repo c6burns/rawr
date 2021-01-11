@@ -3,8 +3,12 @@
 
 #include "rawr/audio.h"
 
-#define RAWR_CODEC_OUTPUT_BYTES_MAX 1400
-#define RAWR_CODEC_INPUT_BYTES_MAX 5760
+#define RAWR_CODEC_OUTPUT_BYTES_MAX 1500
+#define RAWR_CODEC_OUTPUT_SAMPLES_MAX (RAWR_CODEC_OUTPUT_BYTES_MAX / sizeof(rawr_AudioSample))
+
+#define RAWR_CODEC_INPUT_SAMPLES_MAX 5760
+#define RAWR_CODEC_INPUT_BYTES_MAX (RAWR_CODEC_INPUT_SAMPLES_MAX * sizeof(rawr_AudioSample))
+
 
 typedef struct rawr_Codec rawr_Codec;
 

@@ -2,6 +2,7 @@
 #define RAWR_AUDIO_H
 
 #define RAWR_AUDIOSTREAM_SAMPLECOUNT_MAX
+#define RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER 10000.0
 
 typedef short rawr_AudioSample;
 
@@ -49,14 +50,6 @@ typedef enum rawr_AudioDeviceProps {
     rawr_AudioDeviceProps_InputStereo = 1 << 4,
 } rawr_AudioDeviceProps;
 
-typedef enum rawr_AudioStreamState {
-    rawr_AudioStreamState_New,
-    rawr_AudioStreamState_Ready,
-    rawr_AudioStreamState_Started,
-    rawr_AudioStreamState_Playing,
-    rawr_AudioStreamState_Stopped,
-} rawr_AudioStreamState;
-
 typedef struct rawr_AudioDevice rawr_AudioDevice;
 
 typedef struct rawr_AudioStream rawr_AudioStream;
@@ -82,5 +75,8 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream);
 int rawr_AudioStream_Stop(rawr_AudioStream *stream);
 int rawr_AudioStream_Read(rawr_AudioStream *stream, void *buffer);
 int rawr_AudioStream_Write(rawr_AudioStream *stream, void *buffer);
+
+double rawr_AudioStream_InputLevel(rawr_AudioStream *stream);
+double rawr_AudioStream_OutputLevel(rawr_AudioStream *stream);
 
 #endif

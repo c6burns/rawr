@@ -3,12 +3,15 @@
 #include "rawr/ring.h"
 #include "rawr/util.h"
 
-#include "portaudio.h"
-#include <stdint.h>
-
 #include "mn/allocator.h"
+#include "mn/atomic.h"
 #include "mn/error.h"
 #include "mn/log.h"
+
+#include "portaudio.h"
+
+#include <stdint.h>
+#include <math.h>
 
 const double rawr_AudioRateList[] = {
     8000.0,
@@ -62,9 +65,10 @@ typedef struct rawr_AudioStream {
     rawr_AudioDevice *outDevice;
     rawr_AudioRate sampleRate;
     size_t sampleCapacity;
-    rawr_AudioStreamState state;
     int channelCount;
     int sampleCount;
+    mn_atomic_t inputLevel;
+    mn_atomic_t outputLevel;
 } rawr_AudioStream;
 
 static rawr_AudioPrivate audio_priv = {0};
@@ -274,30 +278,45 @@ int rawr_AudioStream_AudioCallback(const void *inputBuffer, void *outputBuffer, 
     RAWR_ASSERT(stream);
     rawr_AudioStreamPriv *priv = rawr_AudioStream_Priv(stream);
 
-    size_t total = 96000;
-    float pct;
+    double inputRms, inputDb, inputLevel, outputRms, outputDb, outputLevel;
+    double weight = 1.0 / (double)framesPerBuffer;
+    double inverse = 1.0 / 32767.0;
+    rawr_AudioSample *inputSamples = (rawr_AudioSample *)inputBuffer;
+    rawr_AudioSample *outputSamples = (rawr_AudioSample *)outputBuffer;
+
+    inputRms = outputRms = 0.0;
+    for (int i = 0; i < framesPerBuffer; i++) {
+        inputRms += abs(*(inputSamples + i)) * inverse * weight;
+        outputRms += abs(*(outputSamples + i)) * inverse * weight;
+    }
+
+    /* approx -230 to -10 is what you can expect to see here */
+    inputDb = 20 * log(inputRms);
+    outputDb = 20 * log(outputRms);
+
+    /* drop the lowest range to make the level look stable */
+    inputLevel = max(20.0, min(200.0, inputDb * -1.0)) - 20.0;
+    inputLevel = 1.0 - (inputLevel / 180.0);
+
+    outputLevel = max(20.0, min(200.0, outputDb * -1.0)) - 20.0;
+    outputLevel = 1.0 - (outputLevel / 180.0);
+
+    /* store in atomics for frontend retrival */
+    mn_atomic_store(&stream->inputLevel, inputLevel * RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER);
+    mn_atomic_store(&stream->outputLevel, outputLevel * RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER);
 
     if (outputBuffer) {
         size_t avail = rawr_RingBuffer_GetReadAvailable(&priv->rbToDevice);
-        pct = (float)avail / (float)stream->sampleCapacity;
-
         if (avail < framesPerBuffer) {
-            mn_log_debug("silence");
+            /* emit silence */
             memset(outputBuffer, 0, framesPerBuffer * sizeof(rawr_AudioSample));
         } else {
-            size_t read = rawr_RingBuffer_Read(&priv->rbToDevice, outputBuffer, framesPerBuffer);
+            rawr_RingBuffer_Read(&priv->rbToDevice, outputBuffer, framesPerBuffer);
         }
     }
 
     if (inputBuffer) {
-        size_t avail = rawr_RingBuffer_GetWriteAvailable(&priv->rbFromDevice);
-        
-        pct = (float) avail / (float)stream->sampleCapacity;
-
-        if (stream->state == rawr_AudioStreamState_Started) {
-            if (pct < 0.2f) stream->state = rawr_AudioStreamState_Playing;
-        }
-        size_t wrote = rawr_RingBuffer_Write(&priv->rbFromDevice, inputBuffer, framesPerBuffer);
+        rawr_RingBuffer_Write(&priv->rbFromDevice, inputBuffer, framesPerBuffer);
     }
 
     return paContinue;
@@ -317,7 +336,6 @@ int rawr_AudioStream_Setup(rawr_AudioStream **out_stream, rawr_AudioRate sampleR
     (*out_stream)->sampleRate = sampleRate;
     (*out_stream)->channelCount = channelCount;
     (*out_stream)->sampleCount = sampleCount;
-    (*out_stream)->state = rawr_AudioStreamState_Ready;
     numSamples = rawr_Util_NextPowerOf2((unsigned)((*out_stream)->sampleCount * 10));
     (*out_stream)->sampleCapacity = numSamples;
     
@@ -332,6 +350,9 @@ int rawr_AudioStream_Setup(rawr_AudioStream **out_stream, rawr_AudioRate sampleR
     
     RAWR_GUARD_CLEANUP(rawr_RingBuffer_Initialize(&priv->rbToDevice, sizeof(rawr_AudioSample), numSamples, priv->ringBufferDataTo));
     RAWR_GUARD_CLEANUP(rawr_RingBuffer_Initialize(&priv->rbFromDevice, sizeof(rawr_AudioSample), numSamples, priv->ringBufferDataFrom));
+
+    mn_atomic_store(&(*out_stream)->inputLevel, 0);
+    mn_atomic_store(&(*out_stream)->outputLevel, 0);
 
     return rawr_Success;
 
@@ -397,7 +418,7 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream)
         pInParams->channelCount = stream->channelCount;
         pInParams->device = rawr_AudioDevice_Id(stream->inDevice);
         pInParams->sampleFormat = paInt16;
-        pInParams->suggestedLatency = 0;
+        pInParams->suggestedLatency = rawr_AudioDevice_Priv(stream->inDevice)->deviceInfo->defaultLowInputLatency;
         pInParams->hostApiSpecificStreamInfo = NULL;
     }
 
@@ -407,7 +428,7 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream)
         pOutParams->channelCount = stream->channelCount;
         pOutParams->device = rawr_AudioDevice_Id(stream->outDevice);
         pOutParams->sampleFormat = paInt16;
-        pOutParams->suggestedLatency = 0;
+        pOutParams->suggestedLatency = rawr_AudioDevice_Priv(stream->outDevice)->deviceInfo->defaultLowInputLatency;
         pOutParams->hostApiSpecificStreamInfo = NULL;
     }
 
@@ -426,8 +447,6 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream)
 
     errCode = -2;
     RAWR_GUARD_CLEANUP(Pa_StartStream(priv->pa_stream));
-
-    stream->state = rawr_AudioStreamState_Playing;
 
     return rawr_Success;
 
@@ -451,8 +470,7 @@ int rawr_AudioStream_Read(rawr_AudioStream *stream, void *buffer)
 
     rawr_RingBuffer *rb = &rawr_AudioStream_Priv(stream)->rbFromDevice;
     if (rawr_RingBuffer_GetReadAvailable(rb) < stream->sampleCount) {
-        memset(buffer, 0, stream->sampleCount * sizeof(rawr_AudioSample));
-        return stream->sampleCount;
+        return 0;
     }
 
     return rawr_RingBuffer_Read(rb, buffer, stream->sampleCount);
@@ -469,4 +487,16 @@ int rawr_AudioStream_Write(rawr_AudioStream *stream, void *buffer)
     }
 
     return rawr_RingBuffer_Write(rb, buffer, stream->sampleCount);
+}
+
+// --------------------------------------------------------------------------------------------------------------
+double rawr_AudioStream_InputLevel(rawr_AudioStream *stream)
+{
+    return (double)mn_atomic_load(&stream->inputLevel) / RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER;
+}
+
+// --------------------------------------------------------------------------------------------------------------
+double rawr_AudioStream_OutputLevel(rawr_AudioStream *stream)
+{
+    return (double)mn_atomic_load(&stream->outputLevel) / RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER;
 }
