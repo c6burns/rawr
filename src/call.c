@@ -101,7 +101,9 @@ void rawr_Call_RtpSendThread(rawr_Call *call)
 
     while (!rawr_Call_Exiting(call)) {
         sampleCount = 0;
-        while ((sampleCount = rawr_AudioStream_Read(call->stream, sampleBlock)) == 0) {}
+        while ((sampleCount = rawr_AudioStream_Read(call->stream, sampleBlock)) == 0) {
+            mn_thread_sleep_ms(5);
+        }
         RAWR_GUARD_CLEANUP(sampleCount < 0);
 
         RAWR_GUARD_CLEANUP((len = rawr_Codec_Encode(call->encoder, sampleBlock, opus_packet)) < 0);
