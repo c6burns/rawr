@@ -637,6 +637,31 @@ void rawr_Call_SipThread(rawr_Call *call)
         call,
         NULL
     );
+    
+    /*
+    err = sipreg_register(
+        &call->reSipReg,
+        call->reSip,
+        call->sipRegistrar,
+        call->sipURI,
+        NULL,
+        call->sipURI,
+        60,
+        call->sipName,
+        NULL,
+        0,
+        0,
+        rawr_Call_OnAuth,
+        call,
+        false,
+        rawr_Call_OnRegister,
+        call,
+        NULL,
+        NULL
+    );
+    */
+
+
     mem_deref(mb); /* free SDP buffer */
     if (err) {
         mn_log_error("session connect error: %s", strerror(err));
