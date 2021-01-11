@@ -652,7 +652,6 @@ void rawr_Call_SipThread(rawr_Call *call)
         goto cleanup;
     }
 
-    rawr_Call_Terminate(call);
     rawr_Call_SetExiting(call);
     rawr_Call_SetState(call, rawr_CallState_Stopping);
 
