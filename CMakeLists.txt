@@ -127,7 +127,7 @@ if (RAWR_PORTAUDIO)
 	set(PA_BUILD_TESTS ON CACHE INTERNAL "")
 	set(PA_BUILD_EXAMPLES ON CACHE INTERNAL "")
 	add_subdirectory(deps/portaudio)
-	list(APPEND RAWR_LINK_LIBS portaudio)
+	list(APPEND RAWR_LINK_LIBS portaudio_static)
 	list(APPEND RAWR_INCLUDE_DIRS deps/opus/include)
 endif()
 
@@ -194,11 +194,11 @@ macro(rawr_add_executable rname)
 	target_link_libraries(${rname} rawr ${RAWR_LINK_LIBS})
     target_include_directories(${rname} PRIVATE ${RAWR_INCLUDE_DIRS})
 	
-	if (TARGET portaudio)
-		add_custom_command(TARGET ${rname} POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:portaudio> $<TARGET_FILE_DIR:${rname}>
-		)
-	endif()
+	#if (TARGET portaudio)
+	#	add_custom_command(TARGET ${rname} POST_BUILD
+	#		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:portaudio> $<TARGET_FILE_DIR:${rname}>
+	#	)
+	#endif()
 endmacro()
 
 # playground: portaudio + opus
@@ -213,7 +213,7 @@ endif()
 # playground: portaudio
 if (TARGET portaudio)
     rawr_add_executable(playground_pa_callbacks src/playground/pa/playground_pa_callbacks.c)
-    target_link_libraries(playground_pa_callbacks portaudio)
+    target_link_libraries(playground_pa_callbacks portaudio_static)
 endif()
 
 # playground: srtp
