@@ -3,12 +3,15 @@
 #include "rawr/ring.h"
 #include "rawr/util.h"
 
-#include "portaudio.h"
-#include <stdint.h>
-
 #include "mn/allocator.h"
+#include "mn/atomic.h"
 #include "mn/error.h"
 #include "mn/log.h"
+
+#include "portaudio.h"
+
+#include <stdint.h>
+#include <math.h>
 
 const double rawr_AudioRateList[] = {
     8000.0,
@@ -64,6 +67,8 @@ typedef struct rawr_AudioStream {
     size_t sampleCapacity;
     int channelCount;
     int sampleCount;
+    mn_atomic_t inputLevel;
+    mn_atomic_t outputLevel;
 } rawr_AudioStream;
 
 static rawr_AudioPrivate audio_priv = {0};
@@ -273,19 +278,39 @@ int rawr_AudioStream_AudioCallback(const void *inputBuffer, void *outputBuffer, 
     RAWR_ASSERT(stream);
     rawr_AudioStreamPriv *priv = rawr_AudioStream_Priv(stream);
 
-    size_t total = 96000;
-    float pct;
+    double inputRms, inputDb, inputLevel, outputRms, outputDb, outputLevel;
+    double weight = 1.0 / (double)framesPerBuffer;
+    double inverse = 1.0 / 32767.0;
+    rawr_AudioSample *inputSamples = (rawr_AudioSample *)inputBuffer;
+    rawr_AudioSample *outputSamples = (rawr_AudioSample *)outputBuffer;
 
-    //if (statusFlags & paInputUnderflow) mn_log_debug("paInputUnderflow");
-    //if (statusFlags & paInputOverflow) mn_log_debug("paInputOverflow");
-    //if (statusFlags & paOutputUnderflow) mn_log_debug("paOutputUnderflow");
-    //if (statusFlags & paOutputOverflow) mn_log_debug("paOutputOverflow");
-    //if (statusFlags & paPrimingOutput) mn_log_debug("paPrimingOutput");
+    inputRms = outputRms = 0.0;
+    for (int i = 0; i < framesPerBuffer; i++) {
+        inputRms += abs(*(inputSamples + i)) * inverse * weight;
+        outputRms += abs(*(outputSamples + i)) * inverse * weight;
+    }
+
+    /* approx -230 to -10 is what you can expect to see here */
+    inputDb = 20 * log(inputRms);
+    outputDb = 20 * log(outputRms);
+
+    /* drop the lowest range to make the level look stable */
+    inputLevel = max(20.0, min(200.0, inputDb * -1.0)) - 20.0;
+    inputLevel = 1.0 - (inputLevel / 180.0);
+
+    outputLevel = max(20.0, min(200.0, outputDb * -1.0)) - 20.0;
+    outputLevel = 1.0 - (outputLevel / 180.0);
+
+    mn_log_trace("%0.2f - %0.2f", inputLevel, outputLevel);
+
+    /* store in atomics for frontend retrival */
+    mn_atomic_store(&stream->inputLevel, inputLevel * RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER);
+    mn_atomic_store(&stream->outputLevel, outputLevel * RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER);
 
     if (outputBuffer) {
         size_t avail = rawr_RingBuffer_GetReadAvailable(&priv->rbToDevice);
         if (avail < framesPerBuffer) {
-            //mn_log_debug("emitting silence");
+            /* emit silence */
             memset(outputBuffer, 0, framesPerBuffer * sizeof(rawr_AudioSample));
         } else {
             rawr_RingBuffer_Read(&priv->rbToDevice, outputBuffer, framesPerBuffer);
@@ -327,6 +352,9 @@ int rawr_AudioStream_Setup(rawr_AudioStream **out_stream, rawr_AudioRate sampleR
     
     RAWR_GUARD_CLEANUP(rawr_RingBuffer_Initialize(&priv->rbToDevice, sizeof(rawr_AudioSample), numSamples, priv->ringBufferDataTo));
     RAWR_GUARD_CLEANUP(rawr_RingBuffer_Initialize(&priv->rbFromDevice, sizeof(rawr_AudioSample), numSamples, priv->ringBufferDataFrom));
+
+    mn_atomic_store(&(*out_stream)->inputLevel, 0);
+    mn_atomic_store(&(*out_stream)->outputLevel, 0);
 
     return rawr_Success;
 
@@ -461,4 +489,16 @@ int rawr_AudioStream_Write(rawr_AudioStream *stream, void *buffer)
     }
 
     return rawr_RingBuffer_Write(rb, buffer, stream->sampleCount);
+}
+
+// --------------------------------------------------------------------------------------------------------------
+double rawr_AudioStream_InputLevel(rawr_AudioStream *stream)
+{
+    return (double)mn_atomic_load(&stream->inputLevel) / RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER;
+}
+
+// --------------------------------------------------------------------------------------------------------------
+double rawr_AudioStream_OutputLevel(rawr_AudioStream *stream)
+{
+    return (double)mn_atomic_load(&stream->outputLevel) / RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER;
 }

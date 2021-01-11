@@ -2,6 +2,7 @@
 #define RAWR_AUDIO_H
 
 #define RAWR_AUDIOSTREAM_SAMPLECOUNT_MAX
+#define RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER 10000.0
 
 typedef short rawr_AudioSample;
 
@@ -74,5 +75,8 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream);
 int rawr_AudioStream_Stop(rawr_AudioStream *stream);
 int rawr_AudioStream_Read(rawr_AudioStream *stream, void *buffer);
 int rawr_AudioStream_Write(rawr_AudioStream *stream, void *buffer);
+
+double rawr_AudioStream_InputLevel(rawr_AudioStream *stream);
+double rawr_AudioStream_OutputLevel(rawr_AudioStream *stream);
 
 #endif
