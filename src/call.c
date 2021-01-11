@@ -138,8 +138,7 @@ void rawr_Call_RtpSendThread(rawr_Call *call)
 
             if (recv_stasis >= 3) {
                 mn_log_warning("RTP recv timeout");
-                rawr_Call_SetExiting(call);
-                rawr_Call_Terminate(call);
+                break;
             }
         }
     }
