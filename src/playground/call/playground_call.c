@@ -12,9 +12,9 @@ int main(void)
 {
     rawr_Endpoint epStunServ, epExternal;
 
-    RAWR_GUARD_CLEANUP(rawr_Audio_Setup(&rawrcall));
+    RAWR_GUARD_CLEANUP(rawr_Audio_Setup());
 
-    RAWR_GUARD_CLEANUP(libre_init());
+    RAWR_GUARD_CLEANUP(rawr_Net_Setup());
 
     RAWR_GUARD_CLEANUP(rawr_Call_Setup(&rawrcall, "sip:sip.serverlynx.net", "sip:1001@serverlynx.net", "ChrisBurns", "1001", "422423"));
 
@@ -26,7 +26,7 @@ int main(void)
 
     rawr_Call_Cleaup(rawrcall);
 
-    libre_close();
+    rawr_Net_Cleanup();
 
     rawr_Audio_Cleanup();
 
@@ -35,7 +35,8 @@ int main(void)
 cleanup:
     mn_log_error("ERROR");
 
-    libre_close();
+    rawr_Net_Cleanup();
+
     rawr_Audio_Cleanup();
 
     return 1;
