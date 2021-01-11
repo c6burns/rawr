@@ -96,11 +96,11 @@ int rawr_Endpoint_String(rawr_Endpoint *endpoint, uint16_t *port, char *buf, int
 
     struct sockaddr_in6 *sa = (struct sockaddr_in6 *)endpoint;
     if (rawr_Endpoint_Is6(endpoint)) {
-        uv_ip6_name(sa, ipbuf, 255);
+        inet_ntop(AF_INET6, sa, ipbuf, 255);
         *port = ntohs(sa->sin6_port);
     } else if (rawr_Endpoint_Is4(endpoint)) {
         struct sockaddr_in *sa = (struct sockaddr_in *)endpoint;
-        uv_ip4_name(sa, ipbuf, 255);
+        inet_ntop(AF_INET, sa, ipbuf, 255);
         *port = ntohs(sa->sin_port);
     } else {
         return rawr_Error;

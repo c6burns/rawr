@@ -17,7 +17,6 @@ set(RAWR_LWS OFF CACHE BOOL "Builds and links libwebsockets as a dependency")
 set(RAWR_PORTAUDIO ON CACHE BOOL "Builds and links portaudio as a dependency")
 set(RAWR_LIBSRTP ON CACHE BOOL "Builds and links libsrtp as a dependency")
 set(RAWR_AWSCOMMON ON CACHE BOOL "Builds and links aws-c-common as a dependency")
-set(RAWR_LIBUV ON CACHE BOOL "Builds and links libuv as a dependency")
 set(RAWR_MN ON CACHE BOOL "Builds and links libmn as a dependency")
 set(RAWR_OPUS ON CACHE BOOL "Builds and links opus as a dependency")
 set(RAWR_RE ON CACHE BOOL "Builds and links libre as a dependency")
@@ -106,13 +105,6 @@ if (RAWR_AWSCOMMON)
 	list(APPEND RAWR_INCLUDE_DIRS deps/aws-c-common/include)
 endif()
 
-# libuv
-if (RAWR_LIBUV)
-	add_subdirectory(deps/libuv)
-	list(APPEND RAWR_LINK_LIBS uv)
-	list(APPEND RAWR_INCLUDE_DIRS deps/libuv/include)
-endif()
-
 # mn
 if (RAWR_MN)
 	add_subdirectory(deps/mn)
@@ -180,7 +172,6 @@ rawr_add_library(rawr
     include/rawr/opus.h
     include/rawr/ring.h
     include/rawr/stun.h
-	include/rawr/term.h
     include/rawr/util.h
 	src/app.c
     src/audio.c
@@ -191,7 +182,6 @@ rawr_add_library(rawr
     src/opus.c
     src/ring.c
     src/stun.c
-	src/term.c
     src/util.c
 )
 
@@ -209,18 +199,7 @@ macro(rawr_add_executable rname)
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:portaudio> $<TARGET_FILE_DIR:${rname}>
 		)
 	endif()
-	
-	if (TARGET uv)
-		add_custom_command(TARGET ${rname} POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:uv> $<TARGET_FILE_DIR:${rname}>
-		)
-	endif()
 endmacro()
-
-# playground: user interface
-if (TARGET mn)
-    rawr_add_executable(playground_ui src/playground/ui/playground_ui.c)
-endif()
 
 # playground: portaudio + opus
 if (TARGET portaudio AND TARGET opus)

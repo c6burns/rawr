@@ -276,10 +276,11 @@ set(RE_SRC_LIN
 
 # common
 set(RE_DEFINES HAVE_STDBOOL_H HAVE_INET6 HAVE_SELECT)
-set(RE_LIBRARIES resolv)
+set(RE_LIBRARIES)
 
 # posix
 if (UNIX)
+    list(APPEND RE_LIBRARIES resolv)
 	list(APPEND RE_DEFINES
 		HAVE_ATOMIC
 		HAVE_SIGNAL
@@ -295,7 +296,6 @@ if (UNIX)
 		HAVE_GETOPT
 		HAVE_NET_ROUTE_H
 		HAVE_ROUTE_LIST
-		HAVE_GETIFADDRS
 		HAVE_SYS_SYSCTL_H
 		HAVE_SYSLOG
 		HAVE_FORK
@@ -318,7 +318,8 @@ elseif (UNIX)
 
 # windows
 elseif (WIN32)
-    list(APPEND WIN32 _CONSOLE _CRT_SECURE_NO_DEPRECATE HAVE_IO_H HAVE_POLL)
+    list(APPEND RE_DEFINES WIN32 _CONSOLE _CRT_SECURE_NO_DEPRECATE HAVE_IO_H)
+    list(APPEND RE_LIBRARIES Iphlpapi.lib)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_WIN})
 
 # um no ...
@@ -341,6 +342,7 @@ target_link_libraries(re
 	${OPENSSL_LIBRARIES}
 	${APPLE_CORE}
 	${APPLE_SYSCONFIG}
+    ${RE_LIBRARIES}
 )
 
 # push these values up to the parent scope, in case we're the child
