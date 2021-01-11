@@ -44,8 +44,10 @@ typedef struct rawr_Call {
     mn_thread_t rtpThread;
     size_t rtpBytesSend;
     size_t rtpBytesRecv;
-    double rtpSendRate;
-    double rtpRecvRate;
+    mn_atomic_t rtpSendTotal;
+    mn_atomic_t rtpRecvTotal;
+    mn_atomic_t rtpSendRate;
+    mn_atomic_t rtpRecvRate;
     uint64_t rtpTime;
 
     mn_atomic_t rtpRecvCount;
@@ -63,18 +65,16 @@ void rawr_Call_SetExiting(rawr_Call *call);
 int rawr_Call_Exiting(rawr_Call *call);
 
 
-// private ------------------------------------------------------------------------------------------------------
+// private thread -----------------------------------------------------------------------------------------------
 void rawr_Call_RtpSendThread(rawr_Call *call)
 {
-    rawr_AudioDevice *inDevice;
-    rawr_Codec *encoder;
-    rawr_AudioStream *stream = NULL;
     struct mbuf *re_mb;
     int len, numBytes, sampleCount;
+    char marker;
     char *sampleBlock = NULL;
     int frame_size = rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms);
     uint8_t opus_packet[RAWR_CODEC_OUTPUT_BYTES_MAX];
-    uint64_t bytes_sent, wait_ns, tstamp, tstamp_last, recv_count, last_recv_count, recv_stasis;
+    uint64_t rtp_wait_ns, tstamp, tstamp_last, recv_count, last_recv_count, recv_stasis;
     uint8_t rtp_type = 0x74;
     if (call->rtpReceiver) rtp_type = 0x66;
 
@@ -89,29 +89,19 @@ void rawr_Call_RtpSendThread(rawr_Call *call)
     // set up buffer for rtmp packets
     re_mb = mbuf_alloc(RAWR_CODEC_OUTPUT_BYTES_MAX);
 
-    inDevice = rawr_AudioDevice_DefaultInput();
-
-    if (rawr_AudioStream_Setup(&stream, rawr_AudioRate_48000, 1, frame_size)) {
-        mn_log_error("rawr_AudioStream_Setup failed");
-    }
-
-    if (rawr_AudioStream_AddDevice(stream, inDevice)) {
-        mn_log_error("rawr_AudioStream_AddDevice failed on input");
-    }
-
-    RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&encoder, rawr_CodecType_Encoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
-
-    RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(stream));
-
     recv_stasis = 0;
     last_recv_count = recv_count = mn_atomic_load(&call->rtpRecvCount);
 
-    wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
-    bytes_sent = 0;
     tstamp_last = mn_tstamp();
+    rtp_wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
+
+    call->rtpBytesSend = 0;
+    mn_atomic_store(&call->rtpSendTotal, 0);
+    mn_atomic_store(&call->rtpSendRate, 0);
+
     while (!rawr_Call_Exiting(call)) {
         sampleCount = 0;
-        while ((sampleCount = rawr_AudioStream_Read(stream, sampleBlock)) == 0) {}
+        while ((sampleCount = rawr_AudioStream_Read(call->stream, sampleBlock)) == 0) {}
         RAWR_GUARD_CLEANUP(sampleCount < 0);
 
         RAWR_GUARD_CLEANUP((len = rawr_Codec_Encode(call->encoder, sampleBlock, opus_packet)) < 0);
@@ -121,16 +111,22 @@ void rawr_Call_RtpSendThread(rawr_Call *call)
         mbuf_write_mem(re_mb, opus_packet, len);
         mbuf_advance(re_mb, -len);
 
-        bytes_sent += len + RAWR_CALL_UDP_OVERHEAD_BYTES;
-        call->rtpTime += 960;
+        call->rtpBytesSend += len;
+        call->rtpBytesSend += RAWR_CALL_UDP_OVERHEAD_BYTES;
+        call->rtpTime += frame_size;
 
-        rtp_send(call->reRtp, sdp_media_raddr(call->reSdpMedia), 0, 0, rtp_type, call->rtpTime, re_mb);
+        marker = 0;
+        if (call->rtpTime == frame_size) marker = 1;
+
+        rtp_send(call->reRtp, sdp_media_raddr(call->reSdpMedia), 0, marker, rtp_type, call->rtpTime, re_mb);
 
         tstamp = mn_tstamp();
-        if ((tstamp - tstamp_last) > wait_ns) {
-            mn_log_trace("send rate: %.2f KB/s", (double)bytes_sent / 1024.0);
-            tstamp_last += wait_ns;
-            bytes_sent = 0;
+        if ((tstamp - tstamp_last) > rtp_wait_ns) {
+            mn_atomic_store_fetch_add(&call->rtpSendTotal, call->rtpBytesSend, MN_ATOMIC_ACQ_REL);
+            mn_atomic_store(&call->rtpSendRate, call->rtpBytesSend);
+
+            tstamp_last += rtp_wait_ns;
+            call->rtpBytesSend = 0;
 
             recv_count = mn_atomic_load(&call->rtpRecvCount);
             if (recv_count == last_recv_count) {
@@ -141,9 +137,9 @@ void rawr_Call_RtpSendThread(rawr_Call *call)
             }
 
             if (recv_stasis >= 3) {
+                mn_log_warning("RTP recv timeout");
                 rawr_Call_SetExiting(call);
-                terminate();
-                re_cancel();
+                rawr_Call_Terminate(call);
             }
         }
     }
@@ -159,25 +155,7 @@ cleanup:
     mn_log_error("error in sending thread");
 }
 
-/* terminate */
-// private ------------------------------------------------------------------------------------------------------
-static void rawr_Call_Terminate(rawr_Call *call)
-{
-    mn_log_warning("terminating");
-
-    /* terminate session */
-    call->reSipSess = mem_deref(call->reSipSess);
-
-    /* terminate registration */
-    call->reSipReg = mem_deref(call->reSipReg);
-
-    rawr_Call_SetExiting(call);
-
-    /* wait for pending transactions to finish */
-    sip_close(call->reSip, false);
-}
-
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_OnRtp(const struct sa *src, const struct rtp_header *hdr, struct mbuf *mb, void *arg)
 {
     (void)hdr;
@@ -190,24 +168,9 @@ static void rawr_Call_OnRtp(const struct sa *src, const struct rtp_header *hdr, 
 
     if (!call->rtpHandlerIntialized) {
         call->rtpHandlerIntialized = 1;
-
-        int numBytes;
-        int opus_frame_size = rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms);
-        int frame_size_enum = rawr_Codec_FrameSizeCode(rawr_CodecRate_48k, opus_frame_size);
-
-        if (rawr_AudioStream_Setup(&call->stream, rawr_AudioRate_48000, 1, opus_frame_size)) {
-            mn_log_error("rawr_AudioStream_Setup failed");
-        }
-
-        if (rawr_AudioStream_AddDevice(call->stream, rawr_AudioDevice_DefaultOutput())) {
-            mn_log_error("rawr_AudioStream_AddDevice failed on input");
-        }
-
-        RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&call->decoder, rawr_CodecType_Decoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
-
-        RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(call->stream));
-
         call->rtpBytesRecv = 0;
+        mn_atomic_store(&call->rtpRecvTotal, 0);
+        mn_atomic_store(&call->rtpRecvRate, 0);
         call->rtpLastRecvTime = mn_tstamp();
     }
 
@@ -215,8 +178,8 @@ static void rawr_Call_OnRtp(const struct sa *src, const struct rtp_header *hdr, 
     tstamp = mn_tstamp();
     rtp_wait_ns = mn_tstamp_convert(1, MN_TSTAMP_S, MN_TSTAMP_NS);
     if ((tstamp - call->rtpLastRecvTime) > rtp_wait_ns) {
-        call->rtpRecvRate = (double)call->rtpBytesRecv / 1024.0;
-        mn_log_trace("recv rate: %.2f KB/s", call->rtpRecvRate);
+        mn_atomic_store_fetch_add(&call->rtpRecvTotal, call->rtpBytesRecv, MN_ATOMIC_ACQ_REL);
+        mn_atomic_store(&call->rtpRecvRate, call->rtpBytesRecv);
         call->rtpLastRecvTime += rtp_wait_ns;
         call->rtpBytesRecv = 0;
     }
@@ -236,7 +199,7 @@ cleanup:
 }
 
 /* called for every received RTCP packet */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_OnRtcp(const struct sa *src, struct rtcp_msg *msg, void *arg)
 {
     (void)src;
@@ -246,7 +209,7 @@ static void rawr_Call_OnRtcp(const struct sa *src, struct rtcp_msg *msg, void *a
 }
 
 /* called when challenged for credentials */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static int rawr_Call_OnAuth(char **user, char **pass, const char *realm, void *arg)
 {
     int err = 0;
@@ -262,7 +225,7 @@ static int rawr_Call_OnAuth(char **user, char **pass, const char *realm, void *a
 }
 
 /* print SDP status */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_UpdateMedia(rawr_Call *call)
 {
     const struct sdp_format *fmt;
@@ -285,7 +248,7 @@ static void rawr_Call_UpdateMedia(rawr_Call *call)
  * called when an SDP offer is received (got offer: true) or
  * when an offer is to be sent (got_offer: false)
  */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static int rawr_Call_OnOffer(struct mbuf **mbp, const struct sip_msg *msg, void *arg)
 {
     const bool got_offer = mbuf_get_left(msg->mb);
@@ -313,7 +276,7 @@ static int rawr_Call_OnOffer(struct mbuf **mbp, const struct sip_msg *msg, void 
 }
 
 /* called when an SDP answer is received */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static int rawr_Call_OnAnswer(const struct sip_msg *msg, void *arg)
 {
     int err;
@@ -336,17 +299,17 @@ static int rawr_Call_OnAnswer(const struct sip_msg *msg, void *arg)
 }
 
 /* called when SIP progress (like 180 Ringing) responses are received */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_OnProgress(const struct sip_msg *msg, void *arg)
 {
     RAWR_ASSERT(arg);
     rawr_Call *call = (rawr_Call *)arg;
 
-    mn_log_info("session progress: %u %s", msg->scode, &msg->reason.p);
+    mn_log_info("session progress: %u", msg->scode);
 }
 
 /* called when the session is established */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_OnEstablish(const struct sip_msg *msg, void *arg)
 {
     (void)msg;
@@ -354,13 +317,13 @@ static void rawr_Call_OnEstablish(const struct sip_msg *msg, void *arg)
     RAWR_ASSERT(arg);
     rawr_Call *call = (rawr_Call *)arg;
 
-    mn_thread_launch(&call->rtpThread, rawr_Call_RtpSendThread, NULL);
+    mn_thread_launch(&call->rtpThread, rawr_Call_RtpSendThread, call);
 
     mn_log_info("session established");
 }
 
 /* called when the session fails to connect or is terminated from peer */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_OnClose(int err, const struct sip_msg *msg, void *arg)
 {
     RAWR_ASSERT(arg);
@@ -369,13 +332,13 @@ static void rawr_Call_OnClose(int err, const struct sip_msg *msg, void *arg)
     if (err)
         mn_log_info("session closed: %s", strerror(err));
     else
-        mn_log_info("session closed: %u %s", msg->scode, &msg->reason.p);
+        mn_log_info("session closed: %u", msg->scode);
 
-    terminate();
+    rawr_Call_Terminate(call);
 }
 
 /* called upon incoming calls */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_OnConnect(const struct sip_msg *msg, void *arg)
 {
     struct mbuf *mb;
@@ -426,7 +389,7 @@ static void rawr_Call_OnConnect(const struct sip_msg *msg, void *arg)
         "application/sdp",
         mb,
         rawr_Call_OnAuth,
-        NULL,
+        call,
         false,
         rawr_Call_OnOffer,
         rawr_Call_OnAnswer,
@@ -434,7 +397,7 @@ static void rawr_Call_OnConnect(const struct sip_msg *msg, void *arg)
         NULL,
         NULL,
         rawr_Call_OnClose,
-        NULL,
+        call,
         NULL
     );
     mem_deref(mb); /* free SDP buffer */
@@ -447,13 +410,13 @@ cleanup:
     if (err) {
         (void)sip_treply(NULL, call->reSip, msg, 500, strerror(err));
     } else {
-        mn_log_info("accepting incoming call from <%s>", &msg->from.auri.p);
-        mn_thread_launch(&call->rtpThread, rawr_Call_RtpSendThread, NULL);
+        mn_log_info("accepting incoming call");
+        mn_thread_launch(&call->rtpThread, rawr_Call_RtpSendThread, call);
     }
 }
 
 /* called when register responses are received */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_OnRegister(int err, const struct sip_msg *msg, void *arg)
 {
     (void)arg;
@@ -463,11 +426,11 @@ static void rawr_Call_OnRegister(int err, const struct sip_msg *msg, void *arg)
     if (err)
         mn_log_info("register error: %s", strerror(err));
     else
-        mn_log_info("register reply: %u %s", msg->scode, &msg->reason.p);
+        mn_log_info("register reply: %u", msg->scode);
 }
 
 /* called when all sip transactions are completed */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_OnExit(void *arg)
 {
     (void)arg;
@@ -479,13 +442,32 @@ static void rawr_Call_OnExit(void *arg)
 }
 
 /* called upon reception of SIGINT, SIGALRM or SIGTERM */
-// private ------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_OnSignal(int sig)
 {
     mn_log_info("terminating on signal %d...", sig);
 
-    terminate();
+    re_cancel();
 }
+
+/* terminate */
+// private ------------------------------------------------------------------------------------------------------
+static void rawr_Call_Terminate(rawr_Call *call)
+{
+    mn_log_warning("terminating");
+
+    /* terminate session */
+    call->reSipSess = mem_deref(call->reSipSess);
+
+    /* terminate registration */
+    call->reSipReg = mem_deref(call->reSipReg);
+
+    rawr_Call_SetExiting(call);
+
+    /* wait for pending transactions to finish */
+    sip_close(call->reSip, false);
+}
+
 
 // private ------------------------------------------------------------------------------------------------------
 void rawr_Call_SetState(rawr_Call *call, rawr_CallState callState)
@@ -516,58 +498,73 @@ int rawr_Call_Exiting(rawr_Call *call)
     return (int)mn_atomic_load(&call->threadExiting);
 }
 
-// private ------------------------------------------------------------------------------------------------------
-void rawr_Call_CallThread(rawr_Call *call)
+// private thread -----------------------------------------------------------------------------------------------
+void rawr_Call_SipThread(rawr_Call *call)
 {
     RAWR_ASSERT(call);
 
     struct sa nsv[16];
-    struct dnsc *dnsc = NULL;
-    struct sa laddr, ext_addr;
-    uint32_t nsc;
+    struct dnsc *dnsClient = NULL;
+    struct mbuf *mb;
+    struct sa localAddr;
+    uint32_t nameServerCount;
     int err;
+    const char *sipInviteURI = "sip:3300@sip.serverlynx.net";
 
     rawr_Endpoint epStunServ, epExternal;
 
     rawr_Call_SetState(call, rawr_CallState_Started);
 
-    nsc = ARRAY_SIZE(nsv);
+    if (rawr_AudioStream_Setup(&call->stream, rawr_AudioRate_48000, 1, rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms))) {
+        mn_log_error("rawr_AudioStream_Setup failed");
+    }
+
+    if (rawr_AudioStream_AddDevice(call->stream, rawr_AudioDevice_DefaultInput())) {
+        mn_log_error("rawr_AudioStream_AddDevice failed on input");
+    }
+
+    if (rawr_AudioStream_AddDevice(call->stream, rawr_AudioDevice_DefaultOutput())) {
+        mn_log_error("rawr_AudioStream_AddDevice failed on output");
+    }
+
+    RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&call->encoder, rawr_CodecType_Encoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
+    RAWR_GUARD_CLEANUP(rawr_Codec_Setup(&call->decoder, rawr_CodecType_Decoder, rawr_CodecRate_48k, rawr_CodecTiming_20ms));
+
+    RAWR_GUARD_CLEANUP(rawr_AudioStream_Start(call->stream));
+
+    nameServerCount = ARRAY_SIZE(nsv);
 
     /* fetch list of DNS server IP addresses */
-    err = dns_srv_get(NULL, 0, nsv, &nsc);
+    err = dns_srv_get(NULL, 0, nsv, &nameServerCount);
     if (err) {
         mn_log_error("unable to get dns servers: %s", strerror(err));
         goto cleanup;
     }
 
     /* create DNS client */
-    err = dnsc_alloc(&dnsc, NULL, nsv, nsc);
+    err = dnsc_alloc(&dnsClient, NULL, nsv, nameServerCount);
     if (err) {
         mn_log_error("unable to create dns client: %s", strerror(err));
         goto cleanup;
     }
 
     /* create SIP stack instance */
-    err = sip_alloc(&call->reSip, dnsc, 32, 32, 32, "RAWR v0.9.1", rawr_Call_OnExit, call);
+    err = sip_alloc(&call->reSip, dnsClient, 32, 32, 32, "RAWR v0.9.1", rawr_Call_OnExit, call);
     if (err) {
         mn_log_error("sip error: %s", strerror(err));
         goto cleanup;
     }
 
     /* fetch local IP address */
-    err = net_default_source_addr_get(AF_INET, &laddr);
+    err = net_default_source_addr_get(AF_INET, &localAddr);
     if (err) {
         mn_log_error("local address error: %s", strerror(err));
         goto cleanup;
     }
-
-    /* TODO: grab our external IP here using STUN */
-    sa_set_sa(&ext_addr, rawr_Endpoint_SockAddr(&epExternal));
-    sa_set_port(&laddr, 0);
+    sa_set_port(&localAddr, 0);
 
     /* add supported SIP transports */
-    //err |= sip_transp_add_ext(re_sip, SIP_TRANSP_UDP, &ext_addr, &laddr);
-    err |= sip_transp_add(call->reSip, SIP_TRANSP_UDP, &laddr);
+    err |= sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localAddr);
     if (err) {
         mn_log_error("transport error: %s", strerror(err));
         goto cleanup;
@@ -581,8 +578,8 @@ void rawr_Call_CallThread(rawr_Call *call)
     }
 
     /* create the RTP/RTCP socket */
-    net_default_source_addr_get(AF_INET, &laddr);
-    err = rtp_listen(&call->reRtp, IPPROTO_UDP, &laddr, 16384, 32767, true, rawr_Call_OnRtp, rawr_Call_OnRtcp, call);
+    net_default_source_addr_get(AF_INET, &localAddr);
+    err = rtp_listen(&call->reRtp, IPPROTO_UDP, &localAddr, 16384, 32767, true, rawr_Call_OnRtp, rawr_Call_OnRtcp, call);
     if (err) {
         mn_log_error("rtp listen error: %m", err);
         goto cleanup;
@@ -590,7 +587,7 @@ void rawr_Call_CallThread(rawr_Call *call)
     mn_log_info("local RTP port is %u", sa_port(rtp_local(call->reRtp)));
 
     /* create SDP session */
-    err = sdp_session_alloc(&call->reSdpSess, &laddr);
+    err = sdp_session_alloc(&call->reSdpSess, &localAddr);
     if (err) {
         mn_log_error("sdp session error: %s", strerror(err));
         goto cleanup;
@@ -610,25 +607,72 @@ void rawr_Call_CallThread(rawr_Call *call)
         goto cleanup;
     }
 
-    while (!rawr_Call_Exiting(call)) {
-        int exitLoop = 1;
-
-        rawr_CallState state = rawr_Call_State(call);
-        switch (state) {
-        case rawr_CallState_Ready:
-        case rawr_CallState_Progressing:
-        case rawr_CallState_Media:
-        case rawr_CallState_Connected:
-            exitLoop = 0;
-        }
-
-        if (exitLoop) break;
-
-        mn_thread_sleep_ms(50);
+    /* create SDP offer */
+    err = sdp_encode(&mb, call->reSdpSess, true);
+    if (err) {
+        mn_log_error("sdp encode error: %s", strerror(err));
+        goto cleanup;
     }
 
-cleanup:
+    err = sipsess_connect(
+        &call->reSipSess,
+        call->reSipSessSock,
+        sipInviteURI,
+        call->sipName,
+        call->sipURI,
+        call->sipName,
+        NULL,
+        0,
+        "application/sdp",
+        mb,
+        rawr_Call_OnAuth,
+        call,
+        false,
+        rawr_Call_OnOffer,
+        rawr_Call_OnAnswer,
+        rawr_Call_OnProgress,
+        rawr_Call_OnEstablish,
+        NULL,
+        NULL,
+        rawr_Call_OnClose,
+        call,
+        NULL
+    );
+    mem_deref(mb); /* free SDP buffer */
+    if (err) {
+        mn_log_error("session connect error: %s", strerror(err));
+        goto cleanup;
+    }
+
+    mn_log_info("inviting <%s>...", sipInviteURI);
+
+    /* execute sip signalling until complete */
+    err = re_main(rawr_Call_OnSignal);
+    if (err) {
+        mn_log_error("re_main exited with error: %s", strerror(err));
+        goto cleanup;
+    }
+
+    rawr_Call_Terminate(call);
+    rawr_Call_SetExiting(call);
     rawr_Call_SetState(call, rawr_CallState_Stopping);
+
+    mn_thread_join(&call->rtpThread);
+
+    RAWR_GUARD_CLEANUP(rawr_AudioStream_Stop(call->stream));
+
+    rawr_AudioStream_Cleanup(call->stream);
+
+    rawr_Codec_Cleanup(call->encoder);
+    rawr_Codec_Cleanup(call->decoder);
+
+cleanup:
+
+    mem_deref(call->reSdpSess); /* will also free sdp_media */
+    mem_deref(call->reRtp);
+    mem_deref(call->reSipSessSock);
+    mem_deref(call->reSip);
+    mem_deref(dnsClient);
 }
 
 // --------------------------------------------------------------------------------------------------------------
@@ -637,6 +681,12 @@ int rawr_Call_Setup(rawr_Call **out_call, const char *sipRegistrar, const char *
     RAWR_ASSERT(out_call);
     RAWR_GUARD_NULL(*out_call = MN_MEM_ACQUIRE(sizeof(**out_call)));
     memset(*out_call, 0, sizeof(**out_call));
+
+    snprintf((*out_call)->sipURI, RAWR_CALL_SIPARG_MAX, "%s", sipURI);
+    snprintf((*out_call)->sipName, RAWR_CALL_SIPARG_MAX, "%s", sipName);
+    snprintf((*out_call)->sipRegistrar, RAWR_CALL_SIPARG_MAX, "%s", sipRegistrar);
+    snprintf((*out_call)->sipUsername, RAWR_CALL_SIPARG_MAX, "%s", sipUsername);
+    snprintf((*out_call)->sipPassword, RAWR_CALL_SIPARG_MAX, "%s", sipPassword);
 
     RAWR_GUARD(mn_thread_setup(&(*out_call)->sipThread));
 
@@ -656,7 +706,7 @@ int rawr_Call_Start(rawr_Call *call)
     RAWR_ASSERT(call);
 
     rawr_Call_SetState(call, rawr_CallState_Starting);
-    RAWR_GUARD(mn_thread_launch(&call->sipThread, rawr_Call_CallThread, call));
+    RAWR_GUARD(mn_thread_launch(&call->sipThread, rawr_Call_SipThread, call));
 
     return rawr_Success;
 }
