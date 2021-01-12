@@ -53,8 +53,8 @@ typedef struct rawr_Call {
     mn_atomic_t rtpRecvCount;
     uint64_t rtpLastRecvTime;
 
-    uint8_t encodedSamples[RAWR_CODEC_OUTPUT_BYTES_MAX];
-    uint8_t decodedSamples[RAWR_CODEC_INPUT_BYTES_MAX];
+    rawr_AudioSample inputSamples[RAWR_CODEC_OUTPUT_SAMPLES_MAX];
+    rawr_AudioSample outputSamples[RAWR_CODEC_INPUT_SAMPLES_MAX];
 } rawr_Call;
 
 
@@ -71,20 +71,10 @@ void rawr_Call_RtpSendThread(rawr_Call *call)
     struct mbuf *re_mb;
     int len, numBytes, sampleCount;
     char marker;
-    char *sampleBlock = NULL;
     int frame_size = rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms);
-    uint8_t opus_packet[RAWR_CODEC_OUTPUT_BYTES_MAX];
     uint64_t rtp_wait_ns, tstamp, tstamp_last, recv_count, last_recv_count, recv_stasis;
     uint8_t rtp_type = 0x74;
     if (call->rtpReceiver) rtp_type = 0x66;
-
-    numBytes = frame_size * sizeof(rawr_AudioSample);
-    sampleBlock = (char *)malloc(numBytes);
-    if (sampleBlock == NULL) {
-        mn_log_error("recv: Could not allocate record array.");
-        return;
-    }
-    memset(sampleBlock, 0, numBytes);
 
     // set up buffer for rtmp packets
     re_mb = mbuf_alloc(RAWR_CODEC_OUTPUT_BYTES_MAX);
@@ -100,18 +90,19 @@ void rawr_Call_RtpSendThread(rawr_Call *call)
     mn_atomic_store(&call->rtpSendRate, 0);
 
     while (!rawr_Call_Exiting(call)) {
+        assert(re_mb->size == RAWR_CODEC_OUTPUT_BYTES_MAX);
+        mbuf_rewind(re_mb);
+        re_mb->pos = RTP_HEADER_SIZE;
+
         sampleCount = 0;
-        while ((sampleCount = rawr_AudioStream_Read(call->stream, sampleBlock)) == 0) {
+        while ((sampleCount = rawr_AudioStream_Read(call->stream, call->inputSamples)) == 0) {
             mn_thread_sleep_ms(5);
         }
         RAWR_GUARD_CLEANUP(sampleCount < 0);
 
-        RAWR_GUARD_CLEANUP((len = rawr_Codec_Encode(call->encoder, sampleBlock, opus_packet)) < 0);
+        RAWR_GUARD_CLEANUP((len = rawr_Codec_Encode(call->encoder, call->inputSamples, mbuf_buf(re_mb))) < 0);
 
-        mbuf_rewind(re_mb);
-        mbuf_fill(re_mb, 0, RTP_HEADER_SIZE);
-        mbuf_write_mem(re_mb, opus_packet, len);
-        mbuf_advance(re_mb, -len);
+        re_mb->end = re_mb->pos + len;
 
         call->rtpBytesSend += len;
         call->rtpBytesSend += RAWR_CALL_UDP_OVERHEAD_BYTES;
@@ -139,7 +130,7 @@ void rawr_Call_RtpSendThread(rawr_Call *call)
             }
 
             if (recv_stasis >= 3) {
-                mn_log_warning("RTP recv timeout");
+                mn_log_warning("RTP recv stasis: %d", recv_stasis);
                 break;
             }
         }
@@ -185,10 +176,10 @@ static void rawr_Call_OnRtp(const struct sa *src, const struct rtp_header *hdr, 
         call->rtpBytesRecv = 0;
     }
 
-    RAWR_GUARD_CLEANUP(rawr_Codec_Decode(call->decoder, mbuf_buf(mb), mbuf_get_left(mb), &call->decodedSamples) < 0);
+    RAWR_GUARD_CLEANUP(rawr_Codec_Decode(call->decoder, mbuf_buf(mb), mbuf_get_left(mb), &call->outputSamples) < 0);
 
     int sampleCount = 0;
-    while ((sampleCount = rawr_AudioStream_Write(call->stream, &call->decodedSamples)) == 0) {}
+    while ((sampleCount = rawr_AudioStream_Write(call->stream, &call->outputSamples)) == 0) {}
     RAWR_GUARD_CLEANUP(sampleCount < 0);
 
     mn_atomic_store_fetch_add(&call->rtpRecvCount, 1, MN_ATOMIC_ACQ_REL);
@@ -707,6 +698,7 @@ cleanup:
 int rawr_Call_Setup(rawr_Call **out_call, const char *sipRegistrar, const char *sipURI, const char *sipName, const char *sipUsername, const char *sipPassword)
 {
     RAWR_ASSERT(out_call);
+
     RAWR_GUARD_NULL(*out_call = MN_MEM_ACQUIRE(sizeof(**out_call)));
     memset(*out_call, 0, sizeof(**out_call));
 
