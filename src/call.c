@@ -562,7 +562,10 @@ void rawr_Call_SipThread(rawr_Call *call)
         mn_log_error("local address error: %s", strerror(err));
         goto cleanup;
     }
-    sa_set_port(&localAddr, 0);
+
+    time_t t;
+    srand((unsigned)time(&t));
+    sa_set_port(&localAddr, (rand() % 16383) + 16384);
 
     /* add supported SIP transports */
     err |= sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localAddr);
