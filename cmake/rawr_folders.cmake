@@ -23,12 +23,6 @@ rawr_target_folder(test_opus_decode "tests/opus")
 rawr_target_folder(test_opus_encode "tests/opus")
 rawr_target_folder(test_opus_padding "tests/opus")
 
-# libsrtp
-rawr_target_folder(srtp2 "deps")
-rawr_target_folder(srtp_driver "examples/libsrtp")
-rawr_target_folder(rtpw "examples/libsrtp")
-rawr_target_folder(test_srtp "tests/libsrtp")
-
 # portaudio
 rawr_target_folder(portaudio_static "deps")
 rawr_target_folder(portaudio "extras/portaudio")
@@ -58,10 +52,6 @@ rawr_target_folder(playground_lws "playgrounds")
 rawr_target_folder(playground_pa "playgrounds")
 rawr_target_folder(playground_pa_callbacks "playgrounds")
 rawr_target_folder(playground_re_sip "playgrounds")
-rawr_target_folder(playground_srtp_recv "playgrounds")
-rawr_target_folder(playground_srtp_send "playgrounds")
-rawr_target_folder(playground_srtp_sendrecv "playgrounds")
-rawr_target_folder(playground_srtp_siprecv "playgrounds")
 rawr_target_folder(playground_ui "playgrounds")
 rawr_target_folder(playground_ice "playgrounds")
 rawr_target_folder(playground_stun "playgrounds")

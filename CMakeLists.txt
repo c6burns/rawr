@@ -15,7 +15,6 @@ endif()
 set(RAWR_MBEDTLS OFF CACHE BOOL "Builds and links mbedtls as a dependency")
 set(RAWR_LWS OFF CACHE BOOL "Builds and links libwebsockets as a dependency")
 set(RAWR_PORTAUDIO ON CACHE BOOL "Builds and links portaudio as a dependency")
-set(RAWR_LIBSRTP OFF CACHE BOOL "Builds and links libsrtp as a dependency")
 set(RAWR_AWSCOMMON ON CACHE BOOL "Builds and links aws-c-common as a dependency")
 set(RAWR_MN ON CACHE BOOL "Builds and links libmn as a dependency")
 set(RAWR_OPUS ON CACHE BOOL "Builds and links opus as a dependency")
@@ -131,13 +130,6 @@ if (RAWR_PORTAUDIO)
 	list(APPEND RAWR_INCLUDE_DIRS deps/opus/include)
 endif()
 
-# libsrtp
-if (RAWR_LIBSRTP)
-	add_subdirectory(deps/libsrtp)
-	list(APPEND RAWR_LINK_LIBS srtp2)
-	list(APPEND RAWR_INCLUDE_DIRS deps/libsrtp/include deps/libsrtp/test ${CMAKE_BINARY_DIR}/deps/libsrtp)
-endif()
-
 # re
 if (RAWR_RE)
 	add_subdirectory(deps/re)
@@ -214,46 +206,6 @@ endif()
 if (TARGET portaudio)
     rawr_add_executable(playground_pa_callbacks src/playground/pa/playground_pa_callbacks.c)
     target_link_libraries(playground_pa_callbacks portaudio_static)
-endif()
-
-# playground: srtp
-if (TARGET portaudio AND TARGET opus AND TARGET srtp2)
-	set(RAWR_SRTP_SRC_COMMON
-		src/playground/srtp/rtp.c
-        src/playground/srtp/util.c
-        src/playground/srtp/playground_srtp.c
-	)
-
-	rawr_add_executable(playground_srtp_sendrecv
-        ${RAWR_SRTP_SRC_COMMON}
-        src/playground/srtp/playground_srtp_sendrecv.c
-    )
-    target_include_directories(playground_srtp_sendrecv PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
-
-    rawr_add_executable(playground_srtp_send
-        ${RAWR_SRTP_SRC_COMMON}
-        src/playground/srtp/playground_srtp_send.c
-    )
-    target_include_directories(playground_srtp_send PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
-
-    rawr_add_executable(playground_srtp_recv
-        ${RAWR_SRTP_SRC_COMMON}
-        src/playground/srtp/playground_srtp_recv.c
-    )
-    target_include_directories(playground_srtp_recv PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
-
-    rawr_add_executable(playground_srtp_siprecv
-        ${RAWR_SRTP_SRC_COMMON}
-        src/playground/srtp/playground_srtp_siprecv.c
-    )
-    target_include_directories(playground_srtp_siprecv PRIVATE ${CMAKE_BINARY_DIR}/deps/libsrtp)
-	
-	if (WIN32)
-		target_compile_definitions(playground_srtp_sendrecv PRIVATE HAVE_WINSOCK2_H)
-		target_compile_definitions(playground_srtp_send PRIVATE HAVE_WINSOCK2_H)
-		target_compile_definitions(playground_srtp_recv PRIVATE HAVE_WINSOCK2_H)
-        target_compile_definitions(playground_srtp_siprecv PRIVATE HAVE_WINSOCK2_H)
-	endif()
 endif()
 
 # playground: libwebsockets
