@@ -6,6 +6,12 @@ enable_testing()
 #
 # setup
 
+# detect PS5 toolchain
+if (__COMPILER_PS5)
+	set(PS5 ON)
+	add_definitions(-DPS5)
+endif()
+
 set(RAWR_INCLUDE_DIRS include)
 set(RAWR_LINK_LIBS)
 if (NOT WIN32)
@@ -22,7 +28,7 @@ set(RAWR_RE ON CACHE BOOL "Builds and links libre as a dependency")
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
-if (NOT WIN32)
+if (NOT WIN32 AND NOT PS5)
 	set(OPENSSL_ROOT_DIR /usr/local/opt/openssl)
 	find_package(OpenSSL REQUIRED)
 endif()
