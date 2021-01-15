@@ -6,6 +6,8 @@
 #include <aws/common/process.h>
 #include <aws/common/string.h>
 
+#ifndef PS5
+
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -80,3 +82,5 @@ on_finish:
     aws_byte_buf_clean_up_secure(&result_buffer);
     return ret;
 }
+
+#endif

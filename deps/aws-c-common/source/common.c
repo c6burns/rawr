@@ -14,7 +14,7 @@
 #ifdef _WIN32
 #    include <Windows.h>
 #else
-#    include <dlfcn.h>
+//#    include <dlfcn.h>
 #endif
 
 #ifdef __MACH__
@@ -45,6 +45,7 @@ void aws_secure_zero(void *pBuf, size_t bufsize) {
     /* This inline asm serves to convince the compiler that the buffer is (somehow) still
      * used after the zero, and therefore that the optimizer can't eliminate the memset.
      */
+#       ifndef PS5
     __asm__ __volatile__("" /* The asm doesn't actually do anything. */
                          :  /* no outputs */
                          /* Tell the compiler that the asm code has access to the pointer to the buffer,
@@ -57,6 +58,7 @@ void aws_secure_zero(void *pBuf, size_t bufsize) {
                           * seems to optimize a zero of a stack buffer without it.
                           */
                          : "memory");
+#       endif
 #    else  // not GCC/clang
     /* We don't have access to inline asm, since we're on a non-GCC platform. Move the pointer
      * through a volatile pointer in an attempt to confuse the optimizer.
@@ -265,7 +267,7 @@ void aws_common_library_init(struct aws_allocator *allocator) {
 
 /* NUMA is funky and we can't rely on libnuma.so being available. We also don't want to take a hard dependency on it,
  * try and load it if we can. */
-#if !defined(_WIN32) && !defined(WIN32)
+#if !defined(_WIN32) && !defined(WIN32) && !defined(PS5)
         g_libnuma_handle = dlopen("libnuma.so", RTLD_NOW);
 
         if (g_libnuma_handle) {
@@ -288,7 +290,7 @@ void aws_common_library_clean_up(void) {
         s_common_library_initialized = false;
         aws_unregister_error_info(&s_list);
         aws_unregister_log_subject_info_list(&s_common_log_subject_list);
-#if !defined(_WIN32) && !defined(WIN32)
+#if !defined(_WIN32) && !defined(WIN32) && !defined(PS5)
         if (g_libnuma_handle) {
             dlclose(g_libnuma_handle);
         }

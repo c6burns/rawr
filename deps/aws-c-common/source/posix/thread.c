@@ -12,7 +12,9 @@
 #include <aws/common/private/dlloads.h>
 #include <aws/common/thread.h>
 
-#include <dlfcn.h>
+#ifndef PS5
+#   include <dlfcn.h>
+#endif
 #include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -160,7 +162,7 @@ int aws_thread_launch(
  * NUMA or not is setup in interleave mode.
  * Thread afinity is also not supported on Android systems, and honestly, if you're running android on a NUMA
  * configuration, you've got bigger problems. */
-#if !defined(__MACH__) && !defined(__ANDROID__)
+#if !defined(__MACH__) && !defined(__ANDROID__) && !defined(PS5)
         if (options->cpu_id >= 0) {
             AWS_LOGF_INFO(
                 AWS_LS_COMMON_THREAD,

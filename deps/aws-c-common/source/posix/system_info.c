@@ -72,7 +72,9 @@ bool aws_is_debugger_present(void) {
     return false;
 }
 
-#include <signal.h>
+#ifndef PS5
+#   include <signal.h>
+#endif
 
 #ifndef __has_builtin
 #    define __has_builtin(x) 0

@@ -13,6 +13,9 @@ int aws_get_environment_value(
     const struct aws_string *variable_name,
     struct aws_string **value_out) {
 
+#ifdef PS5
+    return AWS_OP_ERR;
+#else
     const char *value = getenv(aws_string_c_str(variable_name));
     if (value == NULL) {
         *value_out = NULL;
@@ -25,21 +28,31 @@ int aws_get_environment_value(
     }
 
     return AWS_OP_SUCCESS;
+#endif
 }
 
 int aws_set_environment_value(const struct aws_string *variable_name, const struct aws_string *value) {
+
+#ifdef PS5
+    return AWS_OP_ERR;
+#else
 
     if (setenv(aws_string_c_str(variable_name), aws_string_c_str(value), 1) != 0) {
         return aws_raise_error(AWS_ERROR_ENVIRONMENT_SET);
     }
 
     return AWS_OP_SUCCESS;
+#endif
 }
 
 int aws_unset_environment_value(const struct aws_string *variable_name) {
+#ifdef PS5
+    return AWS_OP_ERR;
+#else
     if (unsetenv(aws_string_c_str(variable_name)) != 0) {
         return aws_raise_error(AWS_ERROR_ENVIRONMENT_UNSET);
     }
 
     return AWS_OP_SUCCESS;
+#endif
 }

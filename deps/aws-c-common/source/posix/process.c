@@ -5,6 +5,8 @@
 
 #include <aws/common/process.h>
 
+#ifndef PS5
+
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -51,3 +53,5 @@ int aws_set_soft_limit_io_handles(size_t max_handles) {
 
     return AWS_OP_SUCCESS;
 }
+
+#endif

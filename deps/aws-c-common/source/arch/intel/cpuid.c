@@ -87,7 +87,7 @@ bool aws_common_private_has_avx2(void) {
     if (AWS_LIKELY(cpuid_state == 1)) {
         return false;
     }
-
+#ifndef PS5
     /* Provide a hook for testing fallbacks and benchmarking */
     const char *env_avx2_enabled = getenv("AWS_COMMON_AVX2");
     if (env_avx2_enabled) {
@@ -95,6 +95,7 @@ bool aws_common_private_has_avx2(void) {
         cpuid_state = !is_enabled;
         return is_enabled;
     }
+#endif
 
     bool available = aws_cpu_has_feature(AWS_CPU_FEATURE_AVX2);
     cpuid_state = available ? CPUID_AVAILABLE : CPUID_UNAVAILABLE;

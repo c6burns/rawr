@@ -4,6 +4,11 @@
  */
 #include <aws/common/time.h>
 
+#ifdef PS5
+#    define localtime_r(x, y) localtime_s(x, y)
+#    define gmtime_r(x, y) gmtime_s(x, y)
+#endif
+
 #if defined(__ANDROID__) && !defined(__LP64__)
 /*
  * This branch brought to you by the kind folks at google chromium. It's been modified a bit, but
