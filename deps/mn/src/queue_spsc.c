@@ -24,7 +24,6 @@ int mn_queue_spsc_setup(mn_queue_spsc_t *q, uint64_t capacity)
     }
     MN_ASSERT(!(capacity & (capacity - 1)));
 
-    int ret = MN_ERROR_NOMEM;
     q->buffer = NULL;
     q->buffer = MN_MEM_ACQUIRE(sizeof(*q->buffer) * (1 + capacity));
     MN_GUARD_NULL(q->buffer);
@@ -158,7 +157,6 @@ int mn_queue_spsc_pop_all(mn_queue_spsc_t *q, void **out_ptr, uint64_t *out_coun
     MN_ASSERT(out_count);
     MN_ASSERT(*out_count > 0);
 
-    const uint64_t mask = q->mask;
     const uint64_t tail = mn_atomic_load_explicit(&q->tail, MN_ATOMIC_RELAXED);
     const uint64_t head = mn_atomic_load(&q->head);
     const uint64_t size = (head - tail);

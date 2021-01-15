@@ -51,10 +51,6 @@ typedef struct mn_log_s {
 
 static mn_log_t mn_log_ctx;
 
-#define MN_LOGLINE_MAX 65535
-static char mn_logline_buffer[MN_LOGLINE_MAX] = { 0 };
-
-
 // private ------------------------------------------------------------------------------------------------------
 void mn_log_lock_impl(void *udata, int lock)
 {
@@ -80,10 +76,10 @@ void mn_log_setup(void)
     mn_log_set_udata(&mn_log_mtx);
     mn_log_set_lock(mn_log_lock_impl);
 
-#   ifdef MN_LOG_FILENAME
+#    ifdef MN_LOG_FILENAME
     mn_log_fp = fopen(MN_LOG_FILENAME, "a+");
     if (mn_log_fp) mn_log_set_fp(mn_log_fp);
-#   endif
+#    endif
 
     mn_log_trace("Application logging started ... ");
 
@@ -195,10 +191,9 @@ void mn_log_log(int level, const char *func, const char *file, int line, uint64_
         time_buf[strftime(time_buf, sizeof(time_buf), "%H:%M:%S", local_time)] = '\0';
 
         if (mn_log_ctx.color) {
-            fprintf(stderr, "%s %s%-5s\033[0m \033[90m%llu:%s:%d - %s: \033[0m ", time_buf, level_colors[level], level_names[level], thread_id, file, line, func);
-        }
-        else {
-            fprintf(stderr, "%s %-5s %llu:%s:%d - %s: ", time_buf, level_names[level], thread_id, file, line, func);
+            fprintf(stderr, "%s %s%-5s\033[0m \033[90m%zu:%s:%d - %s: \033[0m ", time_buf, level_colors[level], level_names[level], thread_id, file, line, func);
+        } else {
+            fprintf(stderr, "%s %-5s %zu:%s:%d - %s: ", time_buf, level_names[level], thread_id, file, line, func);
         }
 
         va_start(args, fmt);
@@ -212,7 +207,7 @@ void mn_log_log(int level, const char *func, const char *file, int line, uint64_
         va_list args;
         char time_buf[64];
         time_buf[strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", local_time)] = '\0';
-        fprintf(mn_log_ctx.fp, "%s %-5s %llu:%s:%d - %s: ", time_buf, level_names[level], thread_id, file, line, func);
+        fprintf(mn_log_ctx.fp, "%s %-5s %zu:%s:%d - %s: ", time_buf, level_names[level], thread_id, file, line, func);
         va_start(args, fmt);
         vfprintf(mn_log_ctx.fp, fmt, args);
         va_end(args);

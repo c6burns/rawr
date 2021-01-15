@@ -18,7 +18,7 @@ int mn_system_setup(mn_system_t *system)
     memset(priv, 0, sizeof(*priv));
     system->priv = priv;
 
-    int cpu_count = priv->cpu_count = 0;
+    priv->cpu_count = 0;
 
     return MN_SUCCESS;
 }
@@ -27,8 +27,6 @@ int mn_system_setup(mn_system_t *system)
 void mn_system_cleanup(mn_system_t *system)
 {
     MN_ASSERT(system);
-
-    mn_system_priv_t *priv = system->priv;
 
     MN_MEM_RELEASE(system->priv);
 }

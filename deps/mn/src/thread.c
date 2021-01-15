@@ -14,7 +14,7 @@ void mn_thread_sleep(uint64_t ns)
 // --------------------------------------------------------------------------------------------------------------
 uint64_t mn_thread_id(void)
 {
-    return aws_thread_current_thread_id();
+    return (uint64_t)aws_thread_current_thread_id();
 }
 
 // --------------------------------------------------------------------------------------------------------------
@@ -36,7 +36,7 @@ int mn_thread_launch(mn_thread_t *thread, void (*func)(void *arg), void *arg)
 uint64_t mn_thread_get_id(mn_thread_t *thread)
 {
     MN_ASSERT(thread);
-    return aws_thread_get_id((struct aws_thread *)thread);
+    return (uint64_t)aws_thread_get_id((struct aws_thread *)thread);
 }
 
 enum mn_thread_state mn_thread_get_state(mn_thread_t *thread)
