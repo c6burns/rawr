@@ -47,7 +47,9 @@
 #include "pa_cpuload.h"
 #include <assert.h>
 #include <pthread.h>
-#include <signal.h>
+#ifndef PS5
+#    include <signal.h>
+#endif
 
 #ifdef __cplusplus
 extern "C"
