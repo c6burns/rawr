@@ -24,8 +24,10 @@
 /* determine platform */
 #if defined(RAWR_FORCE_PLATFORM_NONE)
 #    define RAWR_PLATFORM_NONE 1
-#elif defined(RAWR_FORCE_PLATFORM_PS4)
+#elif defined(RAWR_FORCE_PLATFORM_PS4) || defined(__ORBIS__)
 #    define RAWR_PLATFORM_PS4 1
+#elif defined(RAWR_FORCE_PLATFORM_PS4) || defined(__SCE__)
+#    define RAWR_PLATFORM_PS5 1
 #elif defined(RAWR_FORCE_PLATFORM_XBONE)
 #    define RAWR_PLATFORM_XBONE 1
 #elif defined(RAWR_FORCE_PLATFORM_SWITCH)
@@ -73,6 +75,22 @@
 #    define RAWR_SOCK_API_SWITCH 1
 #elif RAWR_PLATFORM_PS4
 #    define RAWR_SOCK_API_PS4 1
+#elif RAWR_PLATFORM_PS5
+#    define RAWR_SOCK_API_PS5 1
+#    include <fcntl.h>
+#    include <netinet/in.h>
+#    include <sys/socket.h>
+#    include <unistd.h>
+/* PS5 specific */
+#    include <net.h>
+#    include <net6.h>
+#    include <libnetctl.h>
+#    include <netinet/in.h>
+#    include <netinet6/in6.h>
+#    include <sys/socket.h>
+#    include <unistd.h>
+#    define RAWR_SOCK_TYPE int
+
 #endif
 
 /* determine C compiler */
