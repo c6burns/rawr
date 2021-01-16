@@ -4,10 +4,10 @@
  * Copyright (C) 2010 Creytiv.com
  */
 
-
+#include "re_types.h"
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdbool.h>
+
 
 struct mbuf;
 

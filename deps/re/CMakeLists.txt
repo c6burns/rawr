@@ -266,10 +266,11 @@ set(RE_SRC_OSX
 set(RE_SRC_WIN
 	src/net/win32/wif.c
 	src/lock/win32/lock.c
+    src/mqueue/mqueue.c
+    src/mqueue/win32/pipe.c
 	src/dns/win32/srv.c
 	src/mod/win32/dll.c
     src/udp/udp.c
-    src/dns/res.c
     src/tcp/tcp.c
 )
 set(RE_SRC_LIN
@@ -291,8 +292,6 @@ set(RE_SRC_PS5
 
 # common
 set(RE_DEFINES HAVE_STDBOOL_H HAVE_SELECT)
-# removed during PS5 port
-# HAVE_INET6
 set(RE_LIBRARIES)
 
 # posix

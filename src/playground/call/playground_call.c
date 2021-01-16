@@ -1,6 +1,8 @@
-#include "rawr/call.h"
-#include "rawr/error.h"
-#include "rawr/endpoint.h"
+#include "rawr/Audio.h"
+#include "rawr/Call.h"
+#include "rawr/Error.h"
+#include "rawr/Endpoint.h"
+#include "rawr/Net.h"
 
 #include "mn/allocator.h"
 #include "mn/log.h"
@@ -10,8 +12,6 @@ rawr_Call *rawrcall = NULL;
 
 int main(void)
 {
-    rawr_Endpoint epStunServ, epExternal;
-
     RAWR_GUARD_CLEANUP(rawr_Audio_Setup());
 
     RAWR_GUARD_CLEANUP(rawr_Net_Setup());

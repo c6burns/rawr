@@ -14,7 +14,7 @@
 #    define __XSI_VISIBLE 1
 #    define RE_CLOCK_MONOTONIC SCE_KERNEL_CLOCK_MONOTONIC
 #    include <kernel.h>
-#elif
+#else
 #    define RE_CLOCK_MONOTONIC CLOCK_MONOTONIC_RAW
 #endif
 

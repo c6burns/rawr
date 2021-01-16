@@ -6,12 +6,11 @@ enable_testing()
 #
 # setup
 
-set(CMAKE_C_STANDARD 11)
-
 # detect PS5 toolchain
 if (__COMPILER_PS5)
 	set(PS5 ON)
 	add_definitions(-DPS5)
+    set(CMAKE_C_STANDARD 11)
 endif()
 
 set(RAWR_INCLUDE_DIRS include)

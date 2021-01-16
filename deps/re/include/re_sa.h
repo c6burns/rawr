@@ -4,6 +4,7 @@
  * Copyright (C) 2010 Creytiv.com
  */
 #if defined(WIN32)
+#define _WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
