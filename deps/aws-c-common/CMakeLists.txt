@@ -26,6 +26,12 @@ include(AwsSanitizers)
 include(AwsSIMD)
 include(CTest)
 
+# detect PS5 toolchain
+if (__COMPILER_PS5)
+	set(PS5 ON)
+	add_definitions(-DPS5)
+endif()
+
 set(GENERATED_ROOT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(GENERATED_INCLUDE_DIR "${GENERATED_ROOT_DIR}/include")
 set(GENERATED_CONFIG_HEADER "${GENERATED_INCLUDE_DIR}/aws/common/config.h")
@@ -163,6 +169,10 @@ aws_check_headers(${PROJECT_NAME} ${AWS_COMMON_HEADERS} ${AWS_TEST_HEADERS} ${AW
 if (UNIX AND NOT APPLE AND NOT ${CMAKE_SYSTEM_NAME} MATCHES FreeBSD)
     #this only gets applied to aws-c-common (not its consumers).
     target_compile_definitions(${PROJECT_NAME} PRIVATE -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=500)
+endif()
+
+if (PS5)
+    set(PLATFORM_LIBS)
 endif()
 
 aws_add_sanitizers(${PROJECT_NAME} BLACKLIST "sanitizer-blacklist.txt")

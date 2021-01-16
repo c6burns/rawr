@@ -4,11 +4,6 @@
  */
 #include <aws/common/time.h>
 
-#ifdef PS5
-#    define localtime_r(x, y) localtime_s(x, y)
-#    define gmtime_r(x, y) gmtime_s(x, y)
-#endif
-
 #if defined(__ANDROID__) && !defined(__LP64__)
 /*
  * This branch brought to you by the kind folks at google chromium. It's been modified a bit, but
@@ -65,12 +60,25 @@ time_t aws_timegm(struct tm *const t) {
 #else
 
 #    ifndef __APPLE__
+
+#        ifdef PS5
+#            define localtime_r(x, y) localtime_s(x, y)
+#            define gmtime_r(x, y) gmtime_s(x, y)
+
+time_t timegm(struct tm *tmp)
+{
+    time_t tmp_time = mktime(tmp);
+    return mktime(gmtime(&tmp_time));
+}
+
+#       else
 /* glibc.... you disappoint me.. */
 extern time_t timegm(struct tm *);
+#       endif
 #    endif
 
 time_t aws_timegm(struct tm *const t) {
-    return timegm(t);
+    return (time_t)timegm(t);
 }
 
 #endif /* defined(__ANDROID__) && !defined(__LP64__) */
