@@ -6,6 +6,8 @@ enable_testing()
 #
 # setup
 
+set(CMAKE_C_STANDARD 11)
+
 # detect PS5 toolchain
 if (__COMPILER_PS5)
 	set(PS5 ON)
@@ -14,7 +16,7 @@ endif()
 
 set(RAWR_INCLUDE_DIRS include)
 set(RAWR_LINK_LIBS)
-if (NOT WIN32)
+if (NOT WIN32 AND NOT PS5)
 	list(APPEND RAWR_LINK_LIBS resolv)
 endif()
 
