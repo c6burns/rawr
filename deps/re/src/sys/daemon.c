@@ -9,7 +9,9 @@
 #include <unistd.h>
 #endif
 #include <stdlib.h>
-#include <signal.h>
+#ifndef PS5
+#   include <signal.h>
+#endif
 #include <stdio.h>
 #include <re_types.h>
 #include <re_mbuf.h>

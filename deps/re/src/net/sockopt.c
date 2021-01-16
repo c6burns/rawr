@@ -11,6 +11,9 @@
 #include <re_fmt.h>
 #include <re_net.h>
 
+#if defined(PS5)
+#include <net.h>
+#endif
 
 #define DEBUG_MODULE "sockopt"
 #define DEBUG_LEVEL 5
@@ -35,7 +38,10 @@
  */
 int net_sockopt_blocking_set(int fd, bool blocking)
 {
-#ifdef WIN32
+#if defined(PS5)
+    int optval = (int)blocking;
+    return setsockopt(fd, SOL_SOCKET, SCE_NET_SO_NBIO, &optval, 4);
+#elif defined(WIN32)
 	unsigned long noblock = !blocking;
 	int err = 0;
 

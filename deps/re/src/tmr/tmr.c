@@ -9,6 +9,15 @@
 #define _POSIX_C_SOURCE 199309L
 #endif
 
+#ifdef PS5
+#    define __BSD_VISIBLE 1
+#    define __XSI_VISIBLE 1
+#    define RE_CLOCK_MONOTONIC SCE_KERNEL_CLOCK_MONOTONIC
+#    include <kernel.h>
+#elif
+#    define RE_CLOCK_MONOTONIC CLOCK_MONOTONIC_RAW
+#endif
+
 #include <string.h>
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
@@ -32,7 +41,6 @@
 #define DEBUG_MODULE "tmr"
 #define DEBUG_LEVEL 5
 #include <re_dbg.h>
-
 
 /** Timer values */
 enum {
@@ -142,7 +150,7 @@ uint64_t tmr_jiffies_usec(void)
 #else
 	struct timespec now;
 
-	if (0 != clock_gettime(CLOCK_MONOTONIC_RAW, &now)) {
+	if (0 != clock_gettime(RE_CLOCK_MONOTONIC, &now)) {
 		DEBUG_WARNING("jiffies: clock_gettime() failed (%m)\n", errno);
 		return 0;
 	}

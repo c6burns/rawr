@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.15)
 project(re LANGUAGES C)
 
+# detect PS5 toolchain
+if (__COMPILER_PS5)
+	set(PS5 ON)
+	add_definitions(-DPS5)
+endif()
+
 set(APPLE_SYSCONFIG)
 if (APPLE)
 	find_library(APPLE_SYSCONFIG SystemConfiguration)
@@ -52,7 +58,6 @@ set(RE_SRC
 	src/sipsess/close.c
 	src/sipsess/sess.c
 
-	src/udp/udp.c
 	src/udp/mcast.c
 
 	src/msg/param.c
@@ -78,8 +83,6 @@ set(RE_SRC
 	src/fmt/time.c
 	src/fmt/prm.c
 	src/fmt/regex.c
-
-	src/mqueue/mqueue.c
 
 	src/base64/b64.c
 
@@ -151,7 +154,6 @@ set(RE_SRC
 	#src/tls/openssl/tls_udp.c
 	#src/tls/openssl/tls.c
 
-	src/tcp/tcp.c
 	src/tcp/tcp_high.c
 
 	src/http/msg.c
@@ -248,7 +250,6 @@ set(RE_SRC
 set(RE_SRC_POSIX
 	src/net/posix/pif.c
 	src/net/ifaddrs.c
-	src/dns/res.c
     src/mod/dl.c
 	src/lock/lock.c
 	src/lock/rwlock.c
@@ -258,24 +259,40 @@ set(RE_SRC_OSX
     src/aes/apple/aes.c
     src/hmac/apple/hmac.c
 	src/dns/darwin/srv.c
+    src/udp/udp.c
+    src/dns/res.c
+    src/tcp/tcp.c
 )
 set(RE_SRC_WIN
 	src/net/win32/wif.c
 	src/lock/win32/lock.c
-	src/mqueue/win32/pipe.c
 	src/dns/win32/srv.c
 	src/mod/win32/dll.c
+    src/udp/udp.c
+    src/dns/res.c
+    src/tcp/tcp.c
 )
 set(RE_SRC_LIN
 	src/net/linux/rt.c
 	src/main/epoll.c
+    src/udp/udp.c
+    src/dns/res.c
+    src/tcp/tcp.c
+)
+set(RE_SRC_PS5
+    src/lock/lock.c
+	src/lock/rwlock.c
+	src/udp/udp_ps5.c
+	src/tcp/tcp_ps5.c
 )
 
 #
 # defines - crucial to the operation of re
 
 # common
-set(RE_DEFINES HAVE_STDBOOL_H HAVE_INET6 HAVE_SELECT)
+set(RE_DEFINES HAVE_STDBOOL_H HAVE_SELECT)
+# removed during PS5 port
+# HAVE_INET6
 set(RE_LIBRARIES)
 
 # posix
@@ -322,9 +339,14 @@ elseif (WIN32)
     list(APPEND RE_LIBRARIES Iphlpapi.lib)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_WIN})
 
+elseif (PS5)
+    list(APPEND RE_DEFINES LINUX HAVE_SELECT_H HAVE_UNISTD_H HAVE_SYS_TIME_H)
+	list(APPEND RE_LIBRARIES libScePosix_stub_weak.a libSceNetCtl_stub_weak.a)
+	set(RE_SRC ${RE_SRC} ${RE_SRC_PS5})
+
 # um no ...
 else()
-	message(FATAL_ERROR "re can only build on Windows and Posix dekstops (for now)")
+	message(FATAL_ERROR "minre: unidentified build platform")
 endif()
 
 #
@@ -336,7 +358,6 @@ target_compile_definitions(re PRIVATE
 )
 target_include_directories(re PRIVATE
 	include
-	${OPENSSL_INCLUDE_DIR}
 )
 target_link_libraries(re
 	${OPENSSL_LIBRARIES}

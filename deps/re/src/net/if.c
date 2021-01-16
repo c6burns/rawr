@@ -67,7 +67,8 @@ int net_if_getname(char *ifname, size_t sz, int af, const struct sa *ip)
 	ife.sz     = sz;
 	ife.found  = false;
 
-	err = net_if_list(if_getname_handler, &ife);
+	err = -1;
+    //net_if_list(if_getname_handler, &ife);
 
 	return ife.found ? err : ENODEV;
 }
@@ -131,7 +132,8 @@ int net_if_getaddr(const char *ifname, int af, struct sa *ip)
 #ifdef HAVE_GETIFADDRS
 	err = net_getifaddrs(if_getaddr_handler, &ife);
 #else
-	err = net_if_list(if_getaddr_handler, &ife);
+    err = -1;
+    //net_if_list(if_getaddr_handler, &ife);
 #endif
 
 	return ife.found ? err : ENODEV;
@@ -168,7 +170,8 @@ int net_if_debug(struct re_printf *pf, void *unused)
 #ifdef HAVE_GETIFADDRS
 	err |= net_getifaddrs(if_debug_handler, pf);
 #else
-	err |= net_if_list(if_debug_handler, pf);
+    err |= -1;
+    //net_if_list(if_debug_handler, pf);
 #endif
 
 	return err;

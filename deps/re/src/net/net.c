@@ -8,21 +8,23 @@
 #include <stdlib.h>
 #include <string.h>
 #if !defined(WIN32)
-#define __USE_BSD 1  /**< Use BSD code */
-#include <unistd.h>
-#include <netdb.h>
+#    define __USE_BSD 1 /**< Use BSD code */
+#    include <unistd.h>
+#    ifdef PS5
+#        include <libnetctl.h>
+#    else
+#        include <netdb.h>
+#    endif
 #endif
-#include <re_types.h>
 #include <re_fmt.h>
 #include <re_mbuf.h>
-#include <re_sa.h>
 #include <re_net.h>
-
+#include <re_sa.h>
+#include <re_types.h>
 
 #define DEBUG_MODULE "net"
 #define DEBUG_LEVEL 5
 #include <re_dbg.h>
-
 
 /**
  * Get the IP address of the host
@@ -34,27 +36,39 @@
  */
 int net_hostaddr(int af, struct sa *ip)
 {
-	char hostname[256];
-	struct in_addr in;
-	struct hostent *he;
+#ifdef PS5
+    int ret;
+    SceNetCtlInfo info;
+    SceNetInAddr inaddr = {0};
 
-	if (-1 == gethostname(hostname, sizeof(hostname)))
-		return errno;
+    if ((ret = sceNetCtlGetInfo(SCE_NET_CTL_INFO_IP_ADDRESS, &info)) < 0) {
+        return -1;
+    }
 
-	he = gethostbyname(hostname);
-	if (!he)
-		return ENOENT;
+    if (inet_pton(AF_INET, info.ip_address, &ip->u.in.sin_addr) <= 0) {
+        return -1;
+    }
+#else
+    char hostname[256];
+    struct in_addr in;
+    struct hostent *he;
 
-	if (af != he->h_addrtype)
-		return EAFNOSUPPORT;
+    if (-1 == gethostname(hostname, sizeof(hostname)))
+        return errno;
 
-	/* Get the first entry */
-	memcpy(&in, he->h_addr_list[0], sizeof(in));
-	sa_set_in(ip, ntohl(in.s_addr), 0);
+    he = gethostbyname(hostname);
+    if (!he)
+        return ENOENT;
 
-	return 0;
+    if (af != he->h_addrtype)
+        return EAFNOSUPPORT;
+
+    /* Get the first entry */
+    memcpy(&in, he->h_addr_list[0], sizeof(in));
+    sa_set_in(ip, ntohl(in.s_addr), 0);
+#endif
+    return 0;
 }
-
 
 /**
  * Get the default source IP address
@@ -66,28 +80,32 @@ int net_hostaddr(int af, struct sa *ip)
  */
 int net_default_source_addr_get(int af, struct sa *ip)
 {
-#if defined(WIN32)
-	return net_hostaddr(af, ip);
-#else
-	char ifname[64] = "";
-
-#ifdef HAVE_ROUTE_LIST
-	/* Get interface with default route */
-	(void)net_rt_default_get(af, ifname, sizeof(ifname));
+#if defined(PS5)
+    sa_init(ip, AF_INET);
+    return net_hostaddr(af, ip);
 #endif
+#if defined(WIN32)
+    return net_hostaddr(af, ip);
+#else
+    char ifname[64] = "";
 
-	/* First try with default interface */
-	if (0 == net_if_getaddr(ifname, af, ip))
-		return 0;
+#    ifdef HAVE_ROUTE_LIST
+    /* Get interface with default route */
+    (void)net_rt_default_get(af, ifname, sizeof(ifname));
+#    endif
 
-	/* Then try first real IP */
-	if (0 == net_if_getaddr(NULL, af, ip))
-		return 0;
+    /* First try with default interface */
+    if (0 == net_if_getaddr(ifname, af, ip))
+        return 0;
 
-	return net_if_getaddr4(ifname, af, ip);
+    /* Then try first real IP */
+    if (0 == net_if_getaddr(NULL, af, ip))
+        return 0;
+
+    return -1;
+    //return net_if_getaddr4(ifname, af, ip);
 #endif
 }
-
 
 /**
  * Get a list of all network interfaces including name and IP address.
@@ -101,29 +119,27 @@ int net_default_source_addr_get(int af, struct sa *ip)
 int net_if_apply(net_ifaddr_h *ifh, void *arg)
 {
 #ifdef HAVE_GETIFADDRS
-	return net_getifaddrs(ifh, arg);
+    return net_getifaddrs(ifh, arg);
 #else
-	return net_if_list(ifh, arg);
+    return -1;
+    //return net_if_list(ifh, arg);
 #endif
 }
 
-
-static bool net_rt_handler(const char *ifname, const struct sa *dst,
-			   int dstlen, const struct sa *gw, void *arg)
+static bool net_rt_handler(const char *ifname, const struct sa *dst, int dstlen, const struct sa *gw, void *arg)
 {
-	void **argv = arg;
-	struct sa *ip = argv[1];
-	(void)dst;
-	(void)dstlen;
+    void **argv = arg;
+    struct sa *ip = argv[1];
+    (void)dst;
+    (void)dstlen;
 
-	if (0 == str_cmp(ifname, argv[0])) {
-		*ip = *gw;
-		return true;
-	}
+    if (0 == str_cmp(ifname, argv[0])) {
+        *ip = *gw;
+        return true;
+    }
 
-	return false;
+    return false;
 }
-
 
 /**
  * Get the IP-address of the default gateway
@@ -135,23 +151,23 @@ static bool net_rt_handler(const char *ifname, const struct sa *dst,
  */
 int net_default_gateway_get(int af, struct sa *gw)
 {
-	char ifname[64];
-	void *argv[2];
-	int err;
+    char ifname[64];
+    void *argv[2];
+    int err;
 
-	if (!af || !gw)
-		return EINVAL;
+    if (!af || !gw)
+        return EINVAL;
 
-	err = net_rt_default_get(af, ifname, sizeof(ifname));
-	if (err)
-		return err;
+    err = net_rt_default_get(af, ifname, sizeof(ifname));
+    if (err)
+        return err;
 
-	argv[0] = ifname;
-	argv[1] = gw;
+    argv[0] = ifname;
+    argv[1] = gw;
 
-	err = net_rt_list(net_rt_handler, argv);
-	if (err)
-		return err;
+    err = net_rt_list(net_rt_handler, argv);
+    if (err)
+        return err;
 
-	return 0;
+    return 0;
 }

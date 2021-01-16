@@ -4,6 +4,7 @@
  * Copyright (C) 2010 Creytiv.com
  */
 #include <stdio.h>
+#include <string.h>
 #include <re_types.h>
 #include <re_fmt.h>
 #include <re_mbuf.h>
@@ -20,6 +21,31 @@
 #define DEBUG_LEVEL 5
 #include <re_dbg.h>
 
+#ifdef PS5
+#    include <libnetctl.h>
+int get_ps5_dns(struct sa *nsv, uint32_t *n)
+{
+    *n = 0;
+
+    SceNetCtlInfo info;
+
+    memset(&info, 0, sizeof(info));
+    if (sceNetCtlGetInfo(SCE_NET_CTL_INFO_PRIMARY_DNS, &info)) {
+        return -1;
+    }
+    sa_set_str(&nsv[0], info.primary_dns, 53);
+    *n = 1;
+
+    memset(&info, 0, sizeof(info));
+    if (sceNetCtlGetInfo(SCE_NET_CTL_INFO_SECONDARY_DNS, &info)) {
+        return -1;
+    }
+    sa_set_str(&nsv[1], info.primary_dns, 53);
+    *n = 2;
+
+    return 0;
+}
+#endif
 
 static int parse_resolv_conf(char *domain, size_t dsize,
 			     struct sa *srvv, uint32_t *n)
@@ -121,6 +147,11 @@ int dns_srv_get(char *domain, size_t dsize, struct sa *srvv, uint32_t *n)
 	int err;
 
 	/* Try them all in prioritized order */
+#ifdef PS5
+    err = get_ps5_dns(srvv, n);
+    if (!err)
+        return 0;
+#endif
 
 #ifdef HAVE_RESOLV
 	err = get_resolv_dns(domain, dsize, srvv, n);

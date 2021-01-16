@@ -7,7 +7,6 @@
 
 #include <stdarg.h>
 
-
 #ifndef RELEASE
 #define MBUF_DEBUG 1  /**< Mbuf debugging (0 or 1) */
 #endif
@@ -117,7 +116,7 @@ static inline size_t mbuf_get_space(const struct mbuf *mb)
 static inline void mbuf_set_pos(struct mbuf *mb, size_t pos)
 {
 	mb->pos = pos;
-	MBUF_CHECK_POS(mb);
+	//MBUF_CHECK_POS(mb);
 }
 
 
@@ -130,7 +129,7 @@ static inline void mbuf_set_pos(struct mbuf *mb, size_t pos)
 static inline void mbuf_set_end(struct mbuf *mb, size_t end)
 {
 	mb->end = end;
-	MBUF_CHECK_END(mb);
+	//MBUF_CHECK_END(mb);
 }
 
 
@@ -143,7 +142,7 @@ static inline void mbuf_set_end(struct mbuf *mb, size_t end)
 static inline void mbuf_advance(struct mbuf *mb, ssize_t n)
 {
 	mb->pos += n;
-	MBUF_CHECK_POS(mb);
+	//MBUF_CHECK_POS(mb);
 }
 
 

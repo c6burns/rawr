@@ -10,6 +10,10 @@
 #define __USE_POSIX 1 /**< Use POSIX flag */
 #include <time.h>
 
+#ifdef PS5
+#    define gmtime_r(x, y) gmtime_s(x, y)
+#endif
+
 
 static const char *dayv[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
