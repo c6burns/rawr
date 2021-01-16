@@ -52,6 +52,7 @@ int rawr_StunClient_BindingRequest(rawr_Endpoint *stunServer, rawr_Endpoint *out
 
     memset(out_endpoint, 0, sizeof(*out_endpoint));
 
+    sa_init(&sa_srv, AF_INET);
     RAWR_GUARD_CLEANUP(sa_set_sa(&sa_srv, rawr_Endpoint_SockAddr(stunServer)));
 
     RAWR_GUARD_CLEANUP(stun_alloc(&re_stun, NULL, stun_handler, NULL));
