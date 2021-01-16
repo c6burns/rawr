@@ -3,7 +3,7 @@
 
 #include "rawr/platform.h"
 
-#if RAWR_PLATFORM_OSX
+#if RAWR_PLATFORM_OSX || RAWR_PLATFORM_PS5
 #    define RAWR_AF_TYPE uint8_t
 #else
 #    define RAWR_AF_TYPE uint16_t
@@ -15,7 +15,7 @@ typedef enum rawr_SockAF {
 } rawr_SockAF;
 
 typedef struct rawr_SockAddr4 {
-#if RAWR_PLATFORM_OSX
+#if RAWR_PLATFORM_OSX || RAWR_PLATFORM_PS5
     uint8_t len;
 #endif
     RAWR_AF_TYPE af;
@@ -27,7 +27,7 @@ typedef struct rawr_SockAddr4 {
 RAWR_STATIC_ASSERT(sizeof(struct sockaddr_in) == sizeof(rawr_SockAddr4));
 
 typedef struct rawr_SockAddr6 {
-#if RAWR_PLATFORM_OSX
+#if RAWR_PLATFORM_OSX || RAWR_PLATFORM_PS5
     uint8_t len;
 #endif
     RAWR_AF_TYPE af;
