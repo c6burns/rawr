@@ -1,7 +1,7 @@
 #include "rawr/Call.h"
 #include "rawr/Audio.h"
 #include "rawr/Endpoint.h"
-#include "rawr/error.h"
+#include "rawr/Error.h"
 #include "rawr/Codec.h"
 
 #include "mn/allocator.h"

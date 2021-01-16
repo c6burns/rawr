@@ -1,8 +1,8 @@
 #include "rawr/Audio.h"
 #include "rawr/RingBuffer.h"
 #include "rawr/Util.h"
-#include "rawr/error.h"
-#include "rawr/platform.h"
+#include "rawr/Error.h"
+#include "rawr/Platform.h"
 
 #include "mn/allocator.h"
 #include "mn/atomic.h"

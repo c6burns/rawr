@@ -1,6 +1,6 @@
 #include "rawr/dso.h"
 
-#include "rawr/error.h"
+#include "rawr/Error.h"
 
 RAWR_API int32_t RAWR_CALL rawr_dso_setup()
 {

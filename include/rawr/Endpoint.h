@@ -1,7 +1,7 @@
 #ifndef RAWR_ENDPOINT_H
 #define RAWR_ENDPOINT_H
 
-#include "rawr/platform.h"
+#include "rawr/Platform.h"
 
 #if RAWR_PLATFORM_OSX || RAWR_PLATFORM_PS5
 #    define RAWR_AF_TYPE uint8_t

@@ -1,5 +1,5 @@
 #include "rawr/Audio.h"
-#include "rawr/error.h"
+#include "rawr/Error.h"
 #include "rawr/RingBuffer.h"
 #include "rawr/Util.h"
 

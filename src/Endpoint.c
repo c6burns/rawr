@@ -1,7 +1,7 @@
-#include "rawr/endpoint.h"
+#include "rawr/Endpoint.h"
 
-#include "rawr/error.h"
-#include "rawr/platform.h"
+#include "rawr/Error.h"
+#include "rawr/Platform.h"
 
 #include "aws/common/byte_order.h"
 #include "aws/common/byte_buf.h"

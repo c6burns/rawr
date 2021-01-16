@@ -1,6 +1,6 @@
-#include "rawr/error.h"
-#include "rawr/net.h"
-#include "rawr/stun.h"
+#include "rawr/Error.h"
+#include "rawr/Net.h"
+#include "rawr/Stun.h"
 
 #include "mn/log.h"
 #include "mn/thread.h"

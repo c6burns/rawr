@@ -1,5 +1,5 @@
 #include "rawr/Codec.h"
-#include "rawr/error.h"
+#include "rawr/Error.h"
 
 #include "opus.h"
 

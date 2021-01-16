@@ -1,6 +1,6 @@
-#include "rawr/net.h"
-#include "rawr/error.h"
-
+#include "rawr/Net.h"
+#include "rawr/Error.h"
+#include <stdint.h>
 #include "re.h"
 
 int rawr_Net_Setup()

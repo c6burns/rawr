@@ -102,8 +102,11 @@ int net_default_source_addr_get(int af, struct sa *ip)
     if (0 == net_if_getaddr(NULL, af, ip))
         return 0;
 
+#    if PS5
     return -1;
-    //return net_if_getaddr4(ifname, af, ip);
+#    else
+    return net_if_getaddr4(ifname, af, ip);
+#    endif
 #endif
 }
 
@@ -121,8 +124,11 @@ int net_if_apply(net_ifaddr_h *ifh, void *arg)
 #ifdef HAVE_GETIFADDRS
     return net_getifaddrs(ifh, arg);
 #else
+#    if PS5
     return -1;
-    //return net_if_list(ifh, arg);
+#    else
+    return net_if_list(ifh, arg);
+#    endif
 #endif
 }
 
