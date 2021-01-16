@@ -1,6 +1,8 @@
 #include "re.h"
 
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static struct sipsess_sock *re_sess_sock; /* SIP session socket */
 static struct sdp_session *re_sdp;        /* SDP session        */
@@ -10,11 +12,11 @@ static struct sipreg *re_reg;             /* SIP registration   */
 static struct sip *re_sip;                /* SIP stack          */
 static struct rtp_sock *re_rtp;           /* RTP socket         */
 
-const char *re_registrar = "sip:3.223.157.6";
-const char *re_uri = "sip:1001@3.223.157.6";
-const char *re_name = "Chris Burns";
+const char *re_registrar = "sip:sip.serverlynx.net";
+const char *re_uri = "sip:1001@sip.serverlynx.net";
+const char *re_name = "ChrisBurns";
 const char *re_user = "1001";
-const char *re_pass = "874465";
+const char *re_pass = "422423";
 
 /* terminate */
 static void terminate(void)
@@ -279,11 +281,13 @@ int main(int argc, char *argv[])
     }
 
     /* listen on random port */
+    //time_t t;
+    //srand((unsigned)time(&t));
+    //sa_set_port(&laddr, (rand() % 16383) + 16384);
     sa_set_port(&laddr, 0);
 
     /* add supported SIP transports */
     err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
-    err |= sip_transp_add(re_sip, SIP_TRANSP_TCP, &laddr);
     if (err) {
         re_fprintf(stderr, "transport error: %s\n", strerror(err));
         goto out;
@@ -303,7 +307,7 @@ int main(int argc, char *argv[])
         goto out;
     }
 
-    re_printf("local RTP port is %u\n", sa_port(rtp_local(re_rtp)));
+    re_printf("local RTP listener %J\n", rtp_local(re_rtp));
 
     /* create SDP session */
     err = sdp_session_alloc(&re_sdp, &laddr);
@@ -347,7 +351,6 @@ int main(int argc, char *argv[])
 
         re_printf("inviting <%s>...\n", argv[1]);
     } else {
-
         err = sipreg_register(&re_reg, re_sip, re_registrar, re_uri, NULL, re_uri, 60, re_name, NULL, 0, 0, auth_handler, NULL, false, register_handler, NULL, NULL, NULL);
         if (err) {
             re_fprintf(stderr, "register error: %s\n", strerror(err));
