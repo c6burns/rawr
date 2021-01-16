@@ -83,6 +83,30 @@ void rawr_Endpoint_SetBytes(rawr_Endpoint *endpoint, uint8_t b0, uint8_t b1, uin
 }
 
 // --------------------------------------------------------------------------------------------------------------
+uint8_t rawr_Endpoint_B0(rawr_Endpoint *endpoint)
+{
+    return *((uint8_t *)&endpoint->addr4.addr + 0);
+}
+
+// --------------------------------------------------------------------------------------------------------------
+uint8_t rawr_Endpoint_B1(rawr_Endpoint *endpoint)
+{
+    return *((uint8_t *)&endpoint->addr4.addr + 1);
+}
+
+// --------------------------------------------------------------------------------------------------------------
+uint8_t rawr_Endpoint_B2(rawr_Endpoint *endpoint)
+{
+    return *((uint8_t *)&endpoint->addr4.addr + 2);
+}
+
+// --------------------------------------------------------------------------------------------------------------
+uint8_t rawr_Endpoint_B3(rawr_Endpoint *endpoint)
+{
+    return *((uint8_t *)&endpoint->addr4.addr + 3);
+}
+
+// --------------------------------------------------------------------------------------------------------------
 int rawr_Endpoint_String(rawr_Endpoint *endpoint, uint16_t *port, char *buf, int buf_len)
 {
     RAWR_ASSERT(endpoint);
@@ -100,7 +124,7 @@ int rawr_Endpoint_String(rawr_Endpoint *endpoint, uint16_t *port, char *buf, int
         *port = ntohs(sa->sin6_port);
     } else if (rawr_Endpoint_Is4(endpoint)) {
         struct sockaddr_in *sa = (struct sockaddr_in *)endpoint;
-        inet_ntop(AF_INET, sa, ipbuf, 255);
+        snprintf(ipbuf, 255, "%u.%u.%u.%u", rawr_Endpoint_B0(endpoint), rawr_Endpoint_B1(endpoint), rawr_Endpoint_B2(endpoint), rawr_Endpoint_B3(endpoint));
         *port = ntohs(sa->sin_port);
     } else {
         return rawr_Error;
