@@ -121,18 +121,21 @@ endif()
 
 # opus
 if (RAWR_OPUS)
+    set(OPUS_BUILD_TESTING OFF CACHE INTERNAL "")
+    set(BUILD_TESTING OFF CACHE INTERNAL "")
+    set(OPUS_BUILD_PROGRAMS OFF CACHE INTERNAL "")
 	add_subdirectory(deps/opus)
 	list(APPEND RAWR_LINK_LIBS opus)
 	list(APPEND RAWR_INCLUDE_DIRS deps/opus/include)
 endif()
 
 # portaudio
-if (RAWR_PORTAUDIO)
+if (RAWR_PORTAUDIO AND NOT PS5)
 	set(PA_BUILD_SHARED ON CACHE INTERNAL "")
 	set(PA_BUILD_STATIC ON CACHE INTERNAL "")
 	set(PA_DISABLE_INSTALL ON CACHE INTERNAL "")
-	set(PA_BUILD_TESTS ON CACHE INTERNAL "")
-	set(PA_BUILD_EXAMPLES ON CACHE INTERNAL "")
+	set(PA_BUILD_TESTS OFF CACHE INTERNAL "")
+	set(PA_BUILD_EXAMPLES OFF CACHE INTERNAL "")
 	add_subdirectory(deps/portaudio)
 	list(APPEND RAWR_LINK_LIBS portaudio_static)
 	list(APPEND RAWR_INCLUDE_DIRS deps/opus/include)
@@ -143,6 +146,44 @@ if (RAWR_RE)
 	add_subdirectory(deps/re)
 	list(APPEND RAWR_LINK_LIBS re)
 	list(APPEND RAWR_INCLUDE_DIRS deps/re/include)
+endif()
+
+set(RAWR_SRC
+    include/rawr/Audio.h
+    include/rawr/Call.h
+    include/rawr/Endpoint.h
+    include/rawr/Net.h
+    include/rawr/Codec.h
+    include/rawr/MemoryBarrier.h
+    include/rawr/RingBuffer.h
+    include/rawr/Stun.h
+    include/rawr/Util.h
+    src/Call.c
+    src/Endpoint.c
+    src/Net.c
+    src/Codec.c
+    src/RingBuffer.c
+    src/Stun.c
+    src/Util.c
+)
+
+if (PS5)
+    set(RAWR_SRC ${RAWR_SRC}
+        src/AudioPS5.c
+    )
+    list(APPEND RAWR_LINK_LIBS
+        libSceAudioIn_stub_weak.a
+        libSceAudioOut_stub_weak.a
+        libSceAudioOut2_stub_weak.a
+        libSceNetCtl_stub_weak.a
+        libSceNet_stub_weak.a
+        libScePosix_stub_weak.a
+        libSceUserService_stub_weak.a
+    )
+else()
+    set(RAWR_SRC ${RAWR_SRC}
+        src/AudioPA.c
+    )
 endif()
 
 #
@@ -162,28 +203,8 @@ macro(rawr_add_library rname)
     target_include_directories(${rname} PRIVATE ${RAWR_INCLUDE_DIRS})
 endmacro()
 
-rawr_add_library(rawr
-	include/rawr/app.h
-    include/rawr/audio.h
-	include/rawr/buf.h
-    include/rawr/call.h
-    include/rawr/endpoint.h
-    include/rawr/net.h
-    include/rawr/opus.h
-    include/rawr/ring.h
-    include/rawr/stun.h
-    include/rawr/util.h
-	src/app.c
-    src/audio.c
-	src/buf.c
-    src/call.c
-    src/endpoint.c
-    src/net.c
-    src/opus.c
-    src/ring.c
-    src/stun.c
-    src/util.c
-)
+rawr_add_library(rawr ${RAWR_SRC})
+
 
 #
 # executable
@@ -193,12 +214,6 @@ macro(rawr_add_executable rname)
     target_compile_definitions(${rname} PRIVATE ${RE_DEFINES})
 	target_link_libraries(${rname} rawr ${RAWR_LINK_LIBS})
     target_include_directories(${rname} PRIVATE ${RAWR_INCLUDE_DIRS})
-	
-	#if (TARGET portaudio)
-	#	add_custom_command(TARGET ${rname} POST_BUILD
-	#		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:portaudio> $<TARGET_FILE_DIR:${rname}>
-	#	)
-	#endif()
 endmacro()
 
 # playground: portaudio + opus
@@ -206,7 +221,7 @@ if (TARGET portaudio AND TARGET opus)
     rawr_add_executable(playground_pa src/playground/pa/playground_pa.c)
 endif()
 
-if (TARGET portaudio AND TARGET opus AND TARGET re AND TARGET mn)
+if (TARGET opus AND TARGET re AND TARGET mn)
     rawr_add_executable(rawr_demo src/playground/call/playground_call.c res/rawr.rc)
 endif()
 
@@ -233,6 +248,9 @@ if (TARGET re)
     rawr_add_executable(playground_stun src/playground/re/playground_stun.c)
 endif()
 
+if (PS5)
+    rawr_add_executable(playground_ps5 src/playground/ps5/playground_ps5.c)
+endif()
 
 #
 # cmake target

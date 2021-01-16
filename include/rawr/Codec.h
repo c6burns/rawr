@@ -1,7 +1,7 @@
 #ifndef RAWR_OPUS_H
 #define RAWR_OPUS_H
 
-#include "rawr/audio.h"
+#include "rawr/Audio.h"
 
 #define RAWR_CODEC_OUTPUT_BYTES_MAX 1500
 #define RAWR_CODEC_OUTPUT_SAMPLES_MAX (RAWR_CODEC_OUTPUT_BYTES_MAX / sizeof(rawr_AudioSample))

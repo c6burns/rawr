@@ -52,8 +52,8 @@
  @ingroup common_src
 */
 
-#include "rawr/ring.h"
-#include "rawr/barrier.h"
+#include "rawr/RingBuffer.h"
+#include "rawr/MemoryBarrier.h"
 
 #include <math.h>
 #include <stdio.h>

@@ -1,4 +1,4 @@
-#include "rawr/util.h"
+#include "rawr/Util.h"
 
 unsigned rawr_Util_NextPowerOf2(unsigned val)
 {

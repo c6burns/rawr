@@ -1,8 +1,8 @@
-#include "rawr/call.h"
-#include "rawr/audio.h"
-#include "rawr/endpoint.h"
+#include "rawr/Call.h"
+#include "rawr/Audio.h"
+#include "rawr/Endpoint.h"
 #include "rawr/error.h"
-#include "rawr/opus.h"
+#include "rawr/Codec.h"
 
 #include "mn/allocator.h"
 #include "mn/atomic.h"
@@ -66,11 +66,12 @@ int rawr_Call_Exiting(rawr_Call *call);
 
 
 // private thread -----------------------------------------------------------------------------------------------
-void rawr_Call_RtpSendThread(rawr_Call *call)
+void rawr_Call_RtpSendThread(void *arg)
 {
     struct mbuf *re_mb;
-    int len, numBytes, sampleCount;
+    int len, sampleCount;
     char marker;
+    rawr_Call *call = (rawr_Call *)arg;
     int frame_size = rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms);
     uint64_t rtp_wait_ns, tstamp, tstamp_last, recv_count, last_recv_count, recv_stasis;
     uint8_t rtp_type = 0x74;
@@ -218,13 +219,16 @@ static int rawr_Call_OnAuth(char **user, char **pass, const char *realm, void *a
 
 /* print SDP status */
 // private handler ----------------------------------------------------------------------------------------------
-static void rawr_Call_UpdateMedia(rawr_Call *call)
+static void rawr_Call_UpdateMedia(void *arg)
 {
     const struct sdp_format *fmt;
+    char re_remote_ip[16];
+    rawr_Call *call = (rawr_Call *)arg;
+    const struct sa *sdpSA = sdp_media_raddr(call->reSdpMedia);
 
     //memcpy(&re_remote_addr, sdp_media_raddr(re_sdp_media), sizeof(re_remote_addr));
-    uint16_t re_remote_port = ntohs(sdp_media_raddr(call->reSdpMedia)->u.in.sin_port);
-    const char *re_remote_ip = inet_ntoa(sdp_media_raddr(call->reSdpMedia)->u.in.sin_addr);
+    uint16_t re_remote_port = ntohs(sdpSA->u.in.sin_port);
+    inet_pton(sa_af(sdpSA), re_remote_ip, (void *)sdpSA);
     mn_log_info("SDP peer address: %s:%u", re_remote_ip, re_remote_port);
 
     fmt = sdp_media_rformat(call->reSdpMedia, "opus");
@@ -296,6 +300,7 @@ static void rawr_Call_OnProgress(const struct sip_msg *msg, void *arg)
 {
     RAWR_ASSERT(arg);
     rawr_Call *call = (rawr_Call *)arg;
+    (void)call;
 
     mn_log_info("session progress: %u", msg->scode);
 }
@@ -409,17 +414,17 @@ cleanup:
 
 /* called when register responses are received */
 // private handler ----------------------------------------------------------------------------------------------
-static void rawr_Call_OnRegister(int err, const struct sip_msg *msg, void *arg)
-{
-    (void)arg;
-
-    mn_log_warning("called");
-
-    if (err)
-        mn_log_info("register error: %s", strerror(err));
-    else
-        mn_log_info("register reply: %u", msg->scode);
-}
+//static void rawr_Call_OnRegister(int err, const struct sip_msg *msg, void *arg)
+//{
+//    (void)arg;
+//
+//    mn_log_warning("called");
+//
+//    if (err)
+//        mn_log_info("register error: %s", strerror(err));
+//    else
+//        mn_log_info("register reply: %u", msg->scode);
+//}
 
 /* called when all sip transactions are completed */
 // private handler ----------------------------------------------------------------------------------------------
@@ -491,9 +496,9 @@ int rawr_Call_Exiting(rawr_Call *call)
 }
 
 // private thread -----------------------------------------------------------------------------------------------
-void rawr_Call_SipThread(rawr_Call *call)
+void rawr_Call_SipThread(void *arg)
 {
-    RAWR_ASSERT(call);
+    RAWR_ASSERT(arg);
 
     struct sa nsv[16];
     struct dnsc *dnsClient = NULL;
@@ -501,9 +506,8 @@ void rawr_Call_SipThread(rawr_Call *call)
     struct sa localAddr;
     uint32_t nameServerCount;
     int err;
+    rawr_Call *call = (rawr_Call *)arg;
     const char *sipInviteURI = "sip:3300@sip.serverlynx.net";
-
-    rawr_Endpoint epStunServ, epExternal;
 
     rawr_Call_SetState(call, rawr_CallState_Started);
 
@@ -726,7 +730,7 @@ int rawr_Call_Start(rawr_Call *call)
     RAWR_ASSERT(call);
 
     rawr_Call_SetState(call, rawr_CallState_Starting);
-    RAWR_GUARD(mn_thread_launch(&call->sipThread, rawr_Call_SipThread, call));
+    RAWR_GUARD(mn_thread_launch(&call->sipThread, rawr_Call_SipThread, (void*)call));
 
     return rawr_Success;
 }
@@ -759,6 +763,11 @@ int rawr_Call_BlockOnCall(rawr_Call *call)
         case rawr_CallState_Media:
         case rawr_CallState_Connected:
             exitLoop = 0;
+            break;
+        case rawr_CallState_None:
+        case rawr_CallState_Stopping:
+        case rawr_CallState_Stopped:
+            break;
         }
 
         if (exitLoop) break;

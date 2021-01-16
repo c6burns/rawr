@@ -1,6 +1,6 @@
-#include "rawr/audio.h"
-#include "rawr/error.h"
-#include "rawr/opus.h"
+#include "rawr/Audio.h"
+#include "rawr/Error.h"
+#include "rawr/Codec.h"
 
 #include "mn/allocator.h"
 #include "mn/log.h"
@@ -67,21 +67,17 @@ int main(void)
     char *sampleBlock = NULL;
     int numBytes;
     int numChannels = 1;
-    int err;
 
     int sampling_rate = 48000;
-    int num_channels = 1;
 
     int sampleCount = 0;
     opus_int16 *inbuf = NULL;
     unsigned char packet[MAX_PACKET + 257];
     int len;
     opus_int16 *outbuf = NULL;
-    int ret = 0;
 
     int frame_size_ms_x2 = 40;
     int frame_size = frame_size_ms_x2 * sampling_rate / 2000;
-    int frame_size_enum = OPUS_FRAMESIZE_20_MS;
 
     rawr_Codec *decoder, *encoder;
 

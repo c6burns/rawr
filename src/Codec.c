@@ -1,4 +1,4 @@
-#include "rawr/opus.h"
+#include "rawr/Codec.h"
 #include "rawr/error.h"
 
 #include "opus.h"

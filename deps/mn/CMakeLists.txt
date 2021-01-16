@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 project(mn LANGUAGES C)
 include(CTest)
 
+set(MN_BUILD_TESTING OFF CACHE BOOL "Builds associated tests")
+
 #
 # dependencies
 
@@ -46,32 +48,35 @@ target_include_directories(mn PRIVATE
 #
 # tests
 
-# enable testing
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../aws-c-common/cmake)
-include(mn_testing)
-enable_testing()
+if (MN_BUILD_TESTING)
 
-set(MN_TESTS_C
-    tests/test_buffer.c
-	tests/test_list_ptr.c
-	tests/test_queue_spsc.c
-)
-set(TESTS ${MN_TESTS_C})
+    # enable testing
+    list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+    list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../aws-c-common/cmake)
+    include(mn_testing)
+    enable_testing()
 
-mn_add_test_case(mn_buffer_ops)
-mn_add_test_case(mn_list_ptr_create)
-mn_add_test_case(mn_list_ptr_ops)
-mn_add_test_case(mn_queue_spsc_stress)
-mn_add_test_case(mn_queue_spsc_testempty)
-mn_add_test_case(mn_queue_spsc_testfull)
-mn_add_test_case(mn_queue_spsc_npot)
+    set(MN_TESTS_C
+        tests/test_buffer.c
+	    tests/test_list_ptr.c
+	    tests/test_queue_spsc.c
+    )
+    set(TESTS ${MN_TESTS_C})
 
-mn_generate_test_driver(mn-tests mn)
-target_include_directories(mn-tests PRIVATE
-    ../aws-c-common/include
-    ${CMAKE_BINARY_DIR}/deps/aws-c-common/generated/include
-)
+    mn_add_test_case(mn_buffer_ops)
+    mn_add_test_case(mn_list_ptr_create)
+    mn_add_test_case(mn_list_ptr_ops)
+    mn_add_test_case(mn_queue_spsc_stress)
+    mn_add_test_case(mn_queue_spsc_testempty)
+    mn_add_test_case(mn_queue_spsc_testfull)
+    mn_add_test_case(mn_queue_spsc_npot)
 
-# runner for single test for easy debug step through an impl issue
-# mn_test_single(test_devnet_route mn_devnet_route_count_add_increments_count mn)
+    mn_generate_test_driver(mn-tests mn)
+    target_include_directories(mn-tests PRIVATE
+        ../aws-c-common/include
+        ${CMAKE_BINARY_DIR}/deps/aws-c-common/generated/include
+    )
+
+    # runner for single test for easy debug step through an impl issue
+    # mn_test_single(test_devnet_route mn_devnet_route_count_add_increments_count mn)
+endif()

@@ -1,7 +1,7 @@
-#include "rawr/audio.h"
+#include "rawr/Audio.h"
 #include "rawr/error.h"
-#include "rawr/ring.h"
-#include "rawr/util.h"
+#include "rawr/RingBuffer.h"
+#include "rawr/Util.h"
 
 #include "mn/allocator.h"
 #include "mn/atomic.h"
@@ -10,8 +10,8 @@
 
 #include "portaudio.h"
 
-#include <stdint.h>
 #include <math.h>
+#include <stdint.h>
 
 const double rawr_AudioRateList[] = {
     8000.0,
@@ -88,6 +88,9 @@ int rawr_Audio_Setup(void)
     errCode = -2;
     RAWR_GUARD_CLEANUP((audio_priv.deviceCount = Pa_GetDeviceCount()) < 0);
 
+    errCode = -5;
+    RAWR_GUARD_CLEANUP(audio_priv.deviceCount <= 0);
+
     errCode = -3;
     RAWR_GUARD_NULL_CLEANUP(audio_priv.deviceList = MN_MEM_ACQUIRE(audio_priv.deviceCount * sizeof(*audio_priv.deviceList)));
     audio_priv.defaultInputId = Pa_GetDefaultInputDevice();
@@ -159,6 +162,9 @@ cleanup:
         break;
     case -4:
         mn_log_error("device allocation");
+        break;
+    case -5:
+        mn_log_error("no devices found");
         break;
     }
 
@@ -295,10 +301,10 @@ int rawr_AudioStream_AudioCallback(const void *inputBuffer, void *outputBuffer, 
     outputDb = 20 * log(outputRms);
 
     /* drop the lowest range to make the level look stable */
-    inputLevel = max(20.0, min(200.0, inputDb * -1.0)) - 20.0;
+    inputLevel = fmax(20.0, fmin(200.0, inputDb * -1.0)) - 20.0;
     inputLevel = 1.0 - (inputLevel / 180.0);
 
-    outputLevel = max(20.0, min(200.0, outputDb * -1.0)) - 20.0;
+    outputLevel = fmax(20.0, fmin(200.0, outputDb * -1.0)) - 20.0;
     outputLevel = 1.0 - (outputLevel / 180.0);
 
     /* store in atomics for frontend retrival */
@@ -338,7 +344,7 @@ int rawr_AudioStream_Setup(rawr_AudioStream **out_stream, rawr_AudioRate sampleR
     (*out_stream)->sampleCount = sampleCount;
     numSamples = rawr_Util_NextPowerOf2((unsigned)((*out_stream)->sampleCount * 10));
     (*out_stream)->sampleCapacity = numSamples;
-    
+
     RAWR_GUARD_NULL(priv = MN_MEM_ACQUIRE(sizeof(*priv)));
     memset(priv, 0, sizeof(*priv));
     (*out_stream)->priv = priv;
@@ -347,7 +353,7 @@ int rawr_AudioStream_Setup(rawr_AudioStream **out_stream, rawr_AudioRate sampleR
     numBytes = numSamples * sizeof(rawr_AudioSample);
     priv->ringBufferDataTo = MN_MEM_ACQUIRE(numBytes);
     priv->ringBufferDataFrom = MN_MEM_ACQUIRE(numBytes);
-    
+
     RAWR_GUARD_CLEANUP(rawr_RingBuffer_Initialize(&priv->rbToDevice, sizeof(rawr_AudioSample), numSamples, priv->ringBufferDataTo));
     RAWR_GUARD_CLEANUP(rawr_RingBuffer_Initialize(&priv->rbFromDevice, sizeof(rawr_AudioSample), numSamples, priv->ringBufferDataFrom));
 
@@ -441,8 +447,7 @@ int rawr_AudioStream_Start(rawr_AudioStream *stream)
         stream->sampleCount,
         paClipOff,
         rawr_AudioStream_AudioCallback,
-        stream
-    );
+        stream);
     RAWR_GUARD_CLEANUP(err);
 
     errCode = -2;

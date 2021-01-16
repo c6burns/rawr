@@ -42,7 +42,7 @@
  */
 
 #include "portaudio.h"
-#include "rawr/ring.h"
+#include "rawr/RingBuffer.h"
 
 #include "mn/allocator.h"
 #include "mn/error.h"

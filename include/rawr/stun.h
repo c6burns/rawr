@@ -1,7 +1,7 @@
 #ifndef RAWR_STUN_H
 #define RAWR_STUN_H
 
-#include "rawr/endpoint.h"
+#include "rawr/Endpoint.h"
 
 typedef struct rawr_StunClient rawr_StunClient;
 
