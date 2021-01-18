@@ -25,7 +25,8 @@ typedef struct rawr_Call {
     mn_atomic_t threadExiting;
 
     struct sip *reSip;
-    struct rtp_sock *reRtp;
+    struct udp_sock *reSrtp;
+    //struct rtp_sock *reRtp;
     struct sipreg *reSipReg;
     struct sipsess *reSipSess;
     struct sdp_media *reSdpMedia;
@@ -74,6 +75,7 @@ void rawr_Call_RtpSendThread(void *arg)
     rawr_Call *call = (rawr_Call *)arg;
     int frame_size = rawr_Codec_FrameSize(rawr_CodecRate_48k, rawr_CodecTiming_20ms);
     uint64_t rtp_wait_ns, tstamp, tstamp_last, recv_count, last_recv_count, recv_stasis;
+    uint32_t rtpSeq, rtpSsrc;
     uint8_t rtp_type = 0x74;
     if (call->rtpReceiver) rtp_type = 0x66;
 
@@ -90,10 +92,31 @@ void rawr_Call_RtpSendThread(void *arg)
     mn_atomic_store(&call->rtpSendTotal, 0);
     mn_atomic_store(&call->rtpSendRate, 0);
 
+    rtpSeq = 1024;
+    rtpSsrc = 0xdead1ee7;
+
     while (!rawr_Call_Exiting(call)) {
-        assert(re_mb->size == RAWR_CODEC_OUTPUT_BYTES_MAX);
+        RAWR_ASSERT(re_mb->size == RAWR_CODEC_OUTPUT_BYTES_MAX);
+
+        marker = 0;
+        if (call->rtpTime == frame_size) marker = 1;
+
         mbuf_rewind(re_mb);
-        re_mb->pos = RTP_HEADER_SIZE;
+
+        struct rtp_header hdr;
+        hdr.ver = RTP_VERSION;
+        hdr.pad = false;
+        hdr.ext = 0;
+        hdr.cc = 0;
+        hdr.m = marker;
+        hdr.pt = rtp_type;
+        hdr.seq = rtpSeq++;
+        hdr.ts = call->rtpTime;
+        hdr.ssrc = rtpSsrc;
+
+        RAWR_GUARD_CLEANUP(rtp_hdr_encode(re_mb, &hdr));
+
+        //re_mb->pos = RTP_HEADER_SIZE;
 
         sampleCount = 0;
         while ((sampleCount = rawr_AudioStream_Read(call->stream, call->inputSamples)) == 0) {
@@ -109,10 +132,8 @@ void rawr_Call_RtpSendThread(void *arg)
         call->rtpBytesSend += RAWR_CALL_UDP_OVERHEAD_BYTES;
         call->rtpTime += frame_size;
 
-        marker = 0;
-        if (call->rtpTime == frame_size) marker = 1;
-
-        RAWR_GUARD_CLEANUP(rtp_send(call->reRtp, sdp_media_raddr(call->reSdpMedia), 0, marker, rtp_type, call->rtpTime, re_mb) < 0);
+        //RAWR_GUARD_CLEANUP(rtp_send(call->reRtp, sdp_media_raddr(call->reSdpMedia), 0, marker, rtp_type, call->rtpTime, re_mb) < 0);
+        RAWR_GUARD_CLEANUP(udp_send(call->reSrtp, sdp_media_raddr(call->reSdpMedia), re_mb));
 
         tstamp = mn_tstamp();
         if ((tstamp - tstamp_last) > rtp_wait_ns) {
@@ -501,7 +522,8 @@ void rawr_Call_SipThread(void *arg)
     struct sa nsv[16];
     struct dnsc *dnsClient = NULL;
     struct mbuf *mb;
-    struct sa localAddr;
+    struct sa localSipSA;
+    struct sa localRtpSA;
     uint32_t nameServerCount;
     int err;
     rawr_Call *call = (rawr_Call *)arg;
@@ -550,15 +572,13 @@ void rawr_Call_SipThread(void *arg)
     }
 
     /* fetch local IP address */
-    err = net_default_source_addr_get(AF_INET, &localAddr);
+    err = net_default_source_addr_get(AF_INET, &localSipSA);
     if (err) {
         mn_log_error("local address error: %s", strerror(err));
         goto cleanup;
     }
 
-    time_t t;
-    srand((unsigned)time(&t));
-    sa_set_port(&localAddr, (rand() % 16383) + 16384);
+    sa_set_port(&localSipSA, 0);
 
     /* add supported SIP transports */
     struct tls *sip_tls = NULL;
@@ -568,8 +588,8 @@ void rawr_Call_SipThread(void *arg)
         goto cleanup;
     }
 
-    //err = sip_transp_add(call->reSip, SIP_TRANSP_TLS, &localAddr, sip_tls);
-    err = sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localAddr);
+    err = sip_transp_add(call->reSip, SIP_TRANSP_TLS, &localSipSA, sip_tls);
+    err = sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localSipSA);
     if (err) {
         mn_log_error("transport error: %s", strerror(err));
         goto cleanup;
@@ -583,23 +603,30 @@ void rawr_Call_SipThread(void *arg)
     }
 
     /* create the RTP/RTCP socket */
-    net_default_source_addr_get(AF_INET, &localAddr);
-    err = rtp_listen(&call->reRtp, IPPROTO_UDP, &localAddr, 16384, 32767, true, rawr_Call_OnRtp, rawr_Call_OnRtcp, call);
-    if (err) {
-        mn_log_error("rtp listen error: %m", err);
-        goto cleanup;
-    }
-    mn_log_info("local RTP port is %u", sa_port(rtp_local(call->reRtp)));
+    time_t t;
+    srand((unsigned)time(&t));
+    uint16_t localRtpPort = (rand() % 16383) + 16384;
+    net_default_source_addr_get(AF_INET, &localRtpSA);
+    sa_set_port(&localRtpSA, localRtpPort);
+
+    err = udp_listen(&call->reSrtp, &localRtpSA, rawr_Call_OnRtp, (void *)call);
+
+    //err = rtp_listen(&call->reRtp, IPPROTO_UDP, &localRtpSA, 16384, 32767, true, rawr_Call_OnRtp, rawr_Call_OnRtcp, call);
+    //if (err) {
+    //    mn_log_error("rtp listen error: %m", err);
+    //    goto cleanup;
+    //}
+    //mn_log_info("local RTP port is %u", sa_port(rtp_local(call->reRtp)));
 
     /* create SDP session */
-    err = sdp_session_alloc(&call->reSdpSess, &localAddr);
+    err = sdp_session_alloc(&call->reSdpSess, &localRtpSA);
     if (err) {
         mn_log_error("sdp session error: %s", strerror(err));
         goto cleanup;
     }
 
     /* add audio sdp media, using port from RTP socket */
-    err = sdp_media_add(&call->reSdpMedia, call->reSdpSess, "audio", sa_port(rtp_local(call->reRtp)), "RTP/AVP");
+    err = sdp_media_add(&call->reSdpMedia, call->reSdpSess, "audio", localRtpPort, "RTP/AVP");
     if (err) {
         mn_log_error("sdp media error: %s", strerror(err));
         goto cleanup;
@@ -698,7 +725,7 @@ void rawr_Call_SipThread(void *arg)
 cleanup:
 
     mem_deref(call->reSdpSess); /* will also free sdp_media */
-    mem_deref(call->reRtp);
+    //mem_deref(call->reRtp);
     mem_deref(call->reSipSessSock);
     mem_deref(call->reSip);
     mem_deref(dnsClient);
