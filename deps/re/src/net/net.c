@@ -7,10 +7,15 @@
 #define _DEFAULT_SOURCE 1
 #include <stdlib.h>
 #include <string.h>
-#if !defined(WIN32)
+#if defined(WIN32)
+#    include <winsock2.h>
+#    include <ws2tcpip.h>
+#    include <iphlpapi.h>
+#else
 #    define __USE_BSD 1 /**< Use BSD code */
 #    include <unistd.h>
 #    ifdef PS5
+#        include <net.h>
 #        include <libnetctl.h>
 #    else
 #        include <netdb.h>
@@ -50,6 +55,7 @@ int net_hostaddr(int af, struct sa *ip)
     }
 #else
     char hostname[256];
+    char ipstr[32] = {0};
     struct in_addr in;
     struct hostent *he;
 
@@ -63,7 +69,7 @@ int net_hostaddr(int af, struct sa *ip)
     if (af != he->h_addrtype)
         return EAFNOSUPPORT;
 
-    /* Get the first entry */
+    /* Get the last entry */
     memcpy(&in, he->h_addr_list[0], sizeof(in));
     sa_set_in(ip, ntohl(in.s_addr), 0);
 #endif
@@ -80,12 +86,46 @@ int net_hostaddr(int af, struct sa *ip)
  */
 int net_default_source_addr_get(int af, struct sa *ip)
 {
-#if defined(PS5)
     sa_init(ip, AF_INET);
+
+#if defined(PS5)
     return net_hostaddr(af, ip);
 #endif
 #if defined(WIN32)
-    return net_hostaddr(af, ip);
+
+    PMIB_IPADDRTABLE pIPAddrTable = NULL;
+    DWORD dwSize = 0;
+    DWORD dwRetVal = 0;
+    DWORD dwIndex = -1;
+
+    if (GetBestInterface(0x80808080, &dwIndex) != NO_ERROR)
+        goto cleanup;
+
+    pIPAddrTable = (MIB_IPADDRTABLE *)malloc(sizeof(MIB_IPADDRTABLE));
+    if (pIPAddrTable) {
+        if (GetIpAddrTable(pIPAddrTable, &dwSize, 0) == ERROR_INSUFFICIENT_BUFFER) {
+            free(pIPAddrTable);
+            pIPAddrTable = (MIB_IPADDRTABLE *)malloc(dwSize);
+        }
+        if (pIPAddrTable == NULL)
+            goto cleanup;
+    }
+    if ((dwRetVal = GetIpAddrTable(pIPAddrTable, &dwSize, 0)) != NO_ERROR)
+        goto cleanup;
+
+    for (int i = 0; i < (int)pIPAddrTable->dwNumEntries; i++) {
+        if (pIPAddrTable->table[i].dwIndex != dwIndex) continue;
+        ip->u.in.sin_addr.S_un.S_addr = pIPAddrTable->table[i].dwAddr;
+        break;
+    }
+
+    free(pIPAddrTable);
+    return 0;
+
+cleanup:
+    if (pIPAddrTable) free(pIPAddrTable);
+    return -1;
+
 #else
     char ifname[64] = "";
 
