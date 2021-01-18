@@ -204,7 +204,6 @@ endmacro()
 
 rawr_add_library(rawr ${RAWR_SRC})
 
-
 #
 # executable
 
@@ -222,6 +221,10 @@ endif()
 
 if (TARGET opus AND TARGET re AND TARGET mn)
     rawr_add_executable(rawr_demo src/playground/call/playground_call.c res/rawr.rc)
+
+    add_custom_command(TARGET rawr_demo POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/client.pem $<TARGET_FILE_DIR:rawr_demo>
+    )
 endif()
 
 # playground: portaudio
@@ -245,6 +248,10 @@ if (TARGET re)
 	rawr_add_executable(playground_re_sip src/playground/re/playground_re_sip.c)
     rawr_add_executable(playground_ice src/playground/re/playground_ice.c)
     rawr_add_executable(playground_stun src/playground/re/playground_stun.c)
+
+    add_custom_command(TARGET playground_re_sip POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/client.pem $<TARGET_FILE_DIR:playground_re_sip>
+    )
 endif()
 
 if (PS5)

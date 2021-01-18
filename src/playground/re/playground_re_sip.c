@@ -250,6 +250,12 @@ int main(int argc, char *argv[])
         goto out;
     }
 
+    err = openssl_init();
+    if (err) {
+        re_fprintf(stderr, "openssl_init failed: %s\n", strerror(err));
+        goto out;
+    }
+
     nsc = ARRAY_SIZE(nsv);
 
     /* fetch list of DNS server IP addresses */
@@ -287,7 +293,15 @@ int main(int argc, char *argv[])
     sa_set_port(&laddr, 0);
 
     /* add supported SIP transports */
-    err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
+    //err |= sip_transp_add(re_sip, SIP_TRANSP_UDP, &laddr);
+    struct tls *sip_tls = NULL;
+    err = tls_alloc(&sip_tls, TLS_METHOD_SSLV23, "agent.pem", "");
+    if (err) {
+        re_fprintf(stderr, "tls_alloc error: %s\n", strerror(err));
+        goto out;
+    }
+
+    err |= sip_transp_add(re_sip, SIP_TRANSP_TLS, &laddr, sip_tls);
     if (err) {
         re_fprintf(stderr, "transport error: %s\n", strerror(err));
         goto out;
@@ -364,6 +378,8 @@ int main(int argc, char *argv[])
     err = re_main(signal_handler);
 
 out:
+    mem_deref(sip_tls);
+
     /* clean up/free all state */
     mem_deref(re_sdp); /* will also free sdp_media */
     mem_deref(re_rtp);

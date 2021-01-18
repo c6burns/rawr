@@ -112,7 +112,7 @@ void rawr_Call_RtpSendThread(void *arg)
         marker = 0;
         if (call->rtpTime == frame_size) marker = 1;
 
-        rtp_send(call->reRtp, sdp_media_raddr(call->reSdpMedia), 0, marker, rtp_type, call->rtpTime, re_mb);
+        RAWR_GUARD_CLEANUP(rtp_send(call->reRtp, sdp_media_raddr(call->reSdpMedia), 0, marker, rtp_type, call->rtpTime, re_mb) < 0);
 
         tstamp = mn_tstamp();
         if ((tstamp - tstamp_last) > rtp_wait_ns) {
@@ -132,7 +132,7 @@ void rawr_Call_RtpSendThread(void *arg)
 
             if (recv_stasis >= 3) {
                 mn_log_warning("RTP recv stasis: %d", recv_stasis);
-                break;
+                //break;
             }
         }
     }
@@ -222,14 +222,12 @@ static int rawr_Call_OnAuth(char **user, char **pass, const char *realm, void *a
 static void rawr_Call_UpdateMedia(void *arg)
 {
     const struct sdp_format *fmt;
-    char re_remote_ip[16];
+    char re_remote_ip[32];
     rawr_Call *call = (rawr_Call *)arg;
-    const struct sa *sdpSA = sdp_media_raddr(call->reSdpMedia);
 
-    //memcpy(&re_remote_addr, sdp_media_raddr(re_sdp_media), sizeof(re_remote_addr));
-    uint16_t re_remote_port = ntohs(sdpSA->u.in.sin_port);
-    inet_pton(sa_af(sdpSA), re_remote_ip, (void *)sdpSA);
-    mn_log_info("SDP peer address: %s:%u", re_remote_ip, re_remote_port);
+    const struct sa *raddr = sdp_media_raddr(call->reSdpMedia);
+    inet_ntop(sa_af(raddr), &raddr->u.in.sin_addr, re_remote_ip, raddr->len);
+    mn_log_info("SDP peer address: %s:%u", re_remote_ip, sa_port(raddr));
 
     fmt = sdp_media_rformat(call->reSdpMedia, "opus");
     if (!fmt) {
@@ -563,7 +561,15 @@ void rawr_Call_SipThread(void *arg)
     sa_set_port(&localAddr, (rand() % 16383) + 16384);
 
     /* add supported SIP transports */
-    err |= sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localAddr);
+    struct tls *sip_tls = NULL;
+    err = tls_alloc(&sip_tls, TLS_METHOD_SSLV23, "agent.pem", "");
+    if (err) {
+        re_fprintf(stderr, "tls_alloc error: %s\n", strerror(err));
+        goto cleanup;
+    }
+
+    err = sip_transp_add(call->reSip, SIP_TRANSP_TLS, &localAddr, sip_tls);
+    //err = sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localAddr);
     if (err) {
         mn_log_error("transport error: %s", strerror(err));
         goto cleanup;
