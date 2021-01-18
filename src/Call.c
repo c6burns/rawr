@@ -609,6 +609,9 @@ void rawr_Call_SipThread(void *arg)
     net_default_source_addr_get(AF_INET, &localRtpSA);
     sa_set_port(&localRtpSA, localRtpPort);
 
+    re_printf("local SIP address: %J\n", &localSipSA);
+    re_printf("local RTP address: %J\n", &localRtpSA);
+
     err = udp_listen(&call->reSrtp, &localRtpSA, rawr_Call_OnRtp, (void *)call);
 
     //err = rtp_listen(&call->reRtp, IPPROTO_UDP, &localRtpSA, 16384, 32767, true, rawr_Call_OnRtp, rawr_Call_OnRtcp, call);
