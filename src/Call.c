@@ -562,14 +562,14 @@ void rawr_Call_SipThread(void *arg)
 
     /* add supported SIP transports */
     struct tls *sip_tls = NULL;
-    err = tls_alloc(&sip_tls, TLS_METHOD_SSLV23, "agent.pem", "");
+    err = tls_alloc(&sip_tls, TLS_METHOD_SSLV23, "client.pem", "");
     if (err) {
         re_fprintf(stderr, "tls_alloc error: %s\n", strerror(err));
         goto cleanup;
     }
 
-    err = sip_transp_add(call->reSip, SIP_TRANSP_TLS, &localAddr, sip_tls);
-    //err = sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localAddr);
+    //err = sip_transp_add(call->reSip, SIP_TRANSP_TLS, &localAddr, sip_tls);
+    err = sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localAddr);
     if (err) {
         mn_log_error("transport error: %s", strerror(err));
         goto cleanup;

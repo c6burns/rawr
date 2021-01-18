@@ -225,6 +225,11 @@ if (TARGET opus AND TARGET re AND TARGET mn)
     add_custom_command(TARGET rawr_demo POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/client.pem $<TARGET_FILE_DIR:rawr_demo>
     )
+    if (WIN32)
+        add_custom_command(TARGET rawr_demo POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/client.pem $<TARGET_FILE_DIR:rawr_demo>/../
+        )
+    endif()
 endif()
 
 # playground: portaudio
