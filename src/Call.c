@@ -25,8 +25,7 @@ typedef struct rawr_Call {
     mn_atomic_t threadExiting;
 
     struct sip *reSip;
-    struct udp_sock *reSrtp;
-    //struct rtp_sock *reRtp;
+    struct rtp_sock *reRtp;
     struct sipreg *reSipReg;
     struct sipsess *reSipSess;
     struct sdp_media *reSdpMedia;
@@ -103,20 +102,7 @@ void rawr_Call_RtpSendThread(void *arg)
 
         mbuf_rewind(re_mb);
 
-        struct rtp_header hdr;
-        hdr.ver = RTP_VERSION;
-        hdr.pad = false;
-        hdr.ext = 0;
-        hdr.cc = 0;
-        hdr.m = marker;
-        hdr.pt = rtp_type;
-        hdr.seq = rtpSeq++;
-        hdr.ts = call->rtpTime;
-        hdr.ssrc = rtpSsrc;
-
-        RAWR_GUARD_CLEANUP(rtp_hdr_encode(re_mb, &hdr));
-
-        //re_mb->pos = RTP_HEADER_SIZE;
+        re_mb->pos = RTP_HEADER_SIZE;
 
         sampleCount = 0;
         while ((sampleCount = rawr_AudioStream_Read(call->stream, call->inputSamples)) == 0) {
@@ -132,8 +118,7 @@ void rawr_Call_RtpSendThread(void *arg)
         call->rtpBytesSend += RAWR_CALL_UDP_OVERHEAD_BYTES;
         call->rtpTime += frame_size;
 
-        //RAWR_GUARD_CLEANUP(rtp_send(call->reRtp, sdp_media_raddr(call->reSdpMedia), 0, marker, rtp_type, call->rtpTime, re_mb) < 0);
-        RAWR_GUARD_CLEANUP(udp_send(call->reSrtp, sdp_media_raddr(call->reSdpMedia), re_mb));
+        RAWR_GUARD_CLEANUP(rtp_send(call->reRtp, sdp_media_raddr(call->reSdpMedia), 0, marker, rtp_type, call->rtpTime, re_mb) < 0);
 
         tstamp = mn_tstamp();
         if ((tstamp - tstamp_last) > rtp_wait_ns) {
@@ -612,14 +597,12 @@ void rawr_Call_SipThread(void *arg)
     re_printf("local SIP address: %J\n", &localSipSA);
     re_printf("local RTP address: %J\n", &localRtpSA);
 
-    err = udp_listen(&call->reSrtp, &localRtpSA, rawr_Call_OnRtp, (void *)call);
-
-    //err = rtp_listen(&call->reRtp, IPPROTO_UDP, &localRtpSA, 16384, 32767, true, rawr_Call_OnRtp, rawr_Call_OnRtcp, call);
-    //if (err) {
-    //    mn_log_error("rtp listen error: %m", err);
-    //    goto cleanup;
-    //}
-    //mn_log_info("local RTP port is %u", sa_port(rtp_local(call->reRtp)));
+    err = rtp_listen(&call->reRtp, IPPROTO_UDP, &localRtpSA, 16384, 32767, true, rawr_Call_OnRtp, rawr_Call_OnRtcp, call);
+    if (err) {
+        mn_log_error("rtp listen error: %m", err);
+        goto cleanup;
+    }
+    mn_log_info("local RTP port is %u", sa_port(rtp_local(call->reRtp)));
 
     /* create SDP session */
     err = sdp_session_alloc(&call->reSdpSess, &localRtpSA);
@@ -728,7 +711,7 @@ void rawr_Call_SipThread(void *arg)
 cleanup:
 
     mem_deref(call->reSdpSess); /* will also free sdp_media */
-    //mem_deref(call->reRtp);
+    mem_deref(call->reRtp);
     mem_deref(call->reSipSessSock);
     mem_deref(call->reSip);
     mem_deref(dnsClient);
