@@ -2,7 +2,9 @@
  * @file ice.c ICE Testcode
  *
  * Copyright (C) 2010 Creytiv.com
+ * Copyright (C) 2020 TLM Partners Inc.
  */
+
 #include "rawr/Error.h"
 
 #include "mn/log.h"
