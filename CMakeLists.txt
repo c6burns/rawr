@@ -23,6 +23,7 @@ set(RAWR_MBEDTLS OFF CACHE BOOL "Builds and links mbedtls as a dependency")
 set(RAWR_LWS OFF CACHE BOOL "Builds and links libwebsockets as a dependency")
 set(RAWR_PORTAUDIO ON CACHE BOOL "Builds and links portaudio as a dependency")
 set(RAWR_AWSCOMMON ON CACHE BOOL "Builds and links aws-c-common as a dependency")
+set(RAWR_LIBSRTP ON CACHE BOOL "Builds and links libsrtp as a dependency")
 set(RAWR_MN ON CACHE BOOL "Builds and links libmn as a dependency")
 set(RAWR_OPUS ON CACHE BOOL "Builds and links opus as a dependency")
 set(RAWR_RE ON CACHE BOOL "Builds and links libre as a dependency")
@@ -116,6 +117,15 @@ if (RAWR_MN)
 	add_subdirectory(deps/mn)
 	list(APPEND RAWR_LINK_LIBS mn)
 	list(APPEND RAWR_INCLUDE_DIRS deps/mn/include)
+endif()
+
+# mn
+if (RAWR_LIBSRTP)
+    set(ENABLE_OPENSSL ON CACHE INTERNAL "")
+    set(TEST_APPS OFF CACHE INTERNAL "")
+	add_subdirectory(deps/libsrtp)
+	list(APPEND RAWR_LINK_LIBS srtp2)
+	list(APPEND RAWR_INCLUDE_DIRS deps/libsrtp/include ${CMAKE_BINARY_DIR}/deps/libsrtp)
 endif()
 
 # opus
@@ -217,6 +227,33 @@ endmacro()
 # playground: portaudio + opus
 if (TARGET portaudio AND TARGET opus)
     rawr_add_executable(playground_pa src/playground/pa/playground_pa.c)
+endif()
+
+# playground: srtp
+if (TARGET srtp2)
+    rawr_add_executable(playground_srtp_send
+        src/playground/srtp/playground_srtp_send.c
+        src/playground/srtp/playground_srtp.c
+        src/playground/srtp/rtp.c
+        src/playground/srtp/util.c
+    )
+    target_compile_definitions(playground_srtp_send PRIVATE HAVE_WINSOCK2_H)
+
+    rawr_add_executable(playground_srtp_recv
+        src/playground/srtp/playground_srtp_recv.c
+        src/playground/srtp/playground_srtp.c
+        src/playground/srtp/rtp.c
+        src/playground/srtp/util.c
+    )
+    target_compile_definitions(playground_srtp_recv PRIVATE HAVE_WINSOCK2_H)
+
+    rawr_add_executable(playground_srtp_sendrecv
+        src/playground/srtp/playground_srtp_sendrecv.c
+        src/playground/srtp/playground_srtp.c
+        src/playground/srtp/rtp.c
+        src/playground/srtp/util.c
+    )
+    target_compile_definitions(playground_srtp_sendrecv PRIVATE HAVE_WINSOCK2_H)
 endif()
 
 if (TARGET opus AND TARGET re AND TARGET mn)

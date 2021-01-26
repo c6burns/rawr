@@ -12,6 +12,9 @@ rawr_target_folder(aws-c-common "deps")
 rawr_target_folder(aws-c-common-assert-tests "deps")
 rawr_target_folder(aws-c-common-tests "deps")
 
+# libsrtp
+rawr_target_folder(srtp2 "deps")
+
 # mn
 rawr_target_folder(mn "deps")
 rawr_target_folder(mn-tests "tests/mn")
