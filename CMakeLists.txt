@@ -290,6 +290,7 @@ if (TARGET re)
 	rawr_add_executable(playground_re_sip src/playground/re/playground_re_sip.c)
     rawr_add_executable(playground_ice src/playground/re/playground_ice.c)
     rawr_add_executable(playground_stun src/playground/re/playground_stun.c)
+    rawr_add_executable(playground_dtls src/playground/re/playground_dtls.c)
 
     add_custom_command(TARGET playground_re_sip POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/client.pem $<TARGET_FILE_DIR:playground_re_sip>

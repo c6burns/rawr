@@ -13,7 +13,10 @@ if (APPLE)
 	find_library(APPLE_CORE CoreFoundation)
 	set(OPENSSL_ROOT_DIR /usr/local/opt/openssl)
 endif()
-find_package(OpenSSL REQUIRED)
+
+if (NOT PS5)
+    find_package(OpenSSL REQUIRED)
+endif()
 
 set(CMAKE_OSX_DEPLOYMENT_TARGET 10.12)
 
@@ -293,6 +296,10 @@ set(RE_SRC_PS5
 # common
 set(RE_DEFINES HAVE_STDBOOL_H HAVE_SELECT)
 set(RE_LIBRARIES)
+
+if (NOT PS5)
+    list(APPEND RE_DEFINES USE_OPENSSL_SRTP USE_OPENSSL_DTLS)
+endif()
 
 # posix
 if (UNIX)
