@@ -13,14 +13,17 @@ if (APPLE)
 	find_library(APPLE_CORE CoreFoundation)
 	set(OPENSSL_ROOT_DIR /usr/local/opt/openssl)
 endif()
-#find_package(OpenSSL REQUIRED)
+
+if (NOT PS5)
+    find_package(OpenSSL REQUIRED)
+endif()
 
 set(CMAKE_OSX_DEPLOYMENT_TARGET 10.12)
 
 set(RE_SRC
 	src/hmac/hmac.c
 	src/hmac/hmac_sha1.c
-	#src/hmac/openssl/hmac.c
+	src/hmac/openssl/hmac.c
 
 	src/md5/wrap.c
 	src/md5/md5.c
@@ -150,9 +153,9 @@ set(RE_SRC
 	src/json/encode.c
 
     # no OpenSSL for now
-	#src/tls/openssl/tls_tcp.c
-	#src/tls/openssl/tls_udp.c
-	#src/tls/openssl/tls.c
+	src/tls/openssl/tls_tcp.c
+	src/tls/openssl/tls_udp.c
+	src/tls/openssl/tls.c
 
 	src/tcp/tcp_high.c
 
@@ -218,7 +221,7 @@ set(RE_SRC
 	src/main/init.c
 	src/main/main.c
 	src/main/method.c
-	#src/main/openssl.c
+	src/main/openssl.c
 
 	src/dns/rr.c
 	src/dns/hdr.c
@@ -245,7 +248,7 @@ set(RE_SRC
 	src/mem/secure.c
 
 	src/aes/stub.c
-	#src/aes/openssl/aes.c
+	src/aes/openssl/aes.c
 )
 set(RE_SRC_POSIX
 	src/net/posix/pif.c
@@ -294,6 +297,10 @@ set(RE_SRC_PS5
 set(RE_DEFINES HAVE_STDBOOL_H HAVE_SELECT)
 set(RE_LIBRARIES)
 
+if (NOT PS5)
+    list(APPEND RE_DEFINES USE_OPENSSL_SRTP USE_OPENSSL_DTLS)
+endif()
+
 # posix
 if (UNIX)
     list(APPEND RE_LIBRARIES resolv)
@@ -334,7 +341,7 @@ elseif (UNIX)
 
 # windows
 elseif (WIN32)
-    list(APPEND RE_DEFINES WIN32 _CONSOLE _CRT_SECURE_NO_DEPRECATE HAVE_IO_H)
+    list(APPEND RE_DEFINES WIN32 _CONSOLE _CRT_SECURE_NO_DEPRECATE HAVE_IO_H USE_TLS)
     list(APPEND RE_LIBRARIES Iphlpapi.lib)
 	set(RE_SRC ${RE_SRC} ${RE_SRC_WIN})
 
@@ -357,6 +364,7 @@ target_compile_definitions(re PRIVATE
 )
 target_include_directories(re PRIVATE
 	include
+    ${OPENSSL_INCLUDE_DIR}
 )
 target_link_libraries(re
 	${OPENSSL_LIBRARIES}

@@ -23,6 +23,7 @@ set(RAWR_MBEDTLS OFF CACHE BOOL "Builds and links mbedtls as a dependency")
 set(RAWR_LWS OFF CACHE BOOL "Builds and links libwebsockets as a dependency")
 set(RAWR_PORTAUDIO ON CACHE BOOL "Builds and links portaudio as a dependency")
 set(RAWR_AWSCOMMON ON CACHE BOOL "Builds and links aws-c-common as a dependency")
+set(RAWR_LIBSRTP ON CACHE BOOL "Builds and links libsrtp as a dependency")
 set(RAWR_MN ON CACHE BOOL "Builds and links libmn as a dependency")
 set(RAWR_OPUS ON CACHE BOOL "Builds and links opus as a dependency")
 set(RAWR_RE ON CACHE BOOL "Builds and links libre as a dependency")
@@ -118,6 +119,15 @@ if (RAWR_MN)
 	list(APPEND RAWR_INCLUDE_DIRS deps/mn/include)
 endif()
 
+# mn
+if (RAWR_LIBSRTP)
+    set(ENABLE_OPENSSL ON CACHE INTERNAL "")
+    set(TEST_APPS OFF CACHE INTERNAL "")
+	add_subdirectory(deps/libsrtp)
+	list(APPEND RAWR_LINK_LIBS srtp2)
+	list(APPEND RAWR_INCLUDE_DIRS deps/libsrtp/include ${CMAKE_BINARY_DIR}/deps/libsrtp)
+endif()
+
 # opus
 if (RAWR_OPUS)
     set(OPUS_BUILD_TESTING OFF CACHE INTERNAL "")
@@ -204,7 +214,6 @@ endmacro()
 
 rawr_add_library(rawr ${RAWR_SRC})
 
-
 #
 # executable
 
@@ -220,8 +229,44 @@ if (TARGET portaudio AND TARGET opus)
     rawr_add_executable(playground_pa src/playground/pa/playground_pa.c)
 endif()
 
+# playground: srtp
+if (TARGET srtp2)
+    rawr_add_executable(playground_srtp_send
+        src/playground/srtp/playground_srtp_send.c
+        src/playground/srtp/playground_srtp.c
+        src/playground/srtp/rtp.c
+        src/playground/srtp/util.c
+    )
+    target_compile_definitions(playground_srtp_send PRIVATE HAVE_WINSOCK2_H)
+
+    rawr_add_executable(playground_srtp_recv
+        src/playground/srtp/playground_srtp_recv.c
+        src/playground/srtp/playground_srtp.c
+        src/playground/srtp/rtp.c
+        src/playground/srtp/util.c
+    )
+    target_compile_definitions(playground_srtp_recv PRIVATE HAVE_WINSOCK2_H)
+
+    rawr_add_executable(playground_srtp_sendrecv
+        src/playground/srtp/playground_srtp_sendrecv.c
+        src/playground/srtp/playground_srtp.c
+        src/playground/srtp/rtp.c
+        src/playground/srtp/util.c
+    )
+    target_compile_definitions(playground_srtp_sendrecv PRIVATE HAVE_WINSOCK2_H)
+endif()
+
 if (TARGET opus AND TARGET re AND TARGET mn)
     rawr_add_executable(rawr_demo src/playground/call/playground_call.c res/rawr.rc)
+
+    add_custom_command(TARGET rawr_demo POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/client.pem $<TARGET_FILE_DIR:rawr_demo>
+    )
+    if (WIN32)
+        add_custom_command(TARGET rawr_demo POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/client.pem $<TARGET_FILE_DIR:rawr_demo>/../
+        )
+    endif()
 endif()
 
 # playground: portaudio
@@ -245,6 +290,11 @@ if (TARGET re)
 	rawr_add_executable(playground_re_sip src/playground/re/playground_re_sip.c)
     rawr_add_executable(playground_ice src/playground/re/playground_ice.c)
     rawr_add_executable(playground_stun src/playground/re/playground_stun.c)
+    rawr_add_executable(playground_dtls src/playground/re/playground_dtls.c)
+
+    add_custom_command(TARGET playground_re_sip POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/client.pem $<TARGET_FILE_DIR:playground_re_sip>
+    )
 endif()
 
 if (PS5)

@@ -451,14 +451,19 @@ static int udp_send_internal(struct udp_sock *us, const struct sa *dst,
 
 	/* Connected socket? */
 	if (us->conn) {
-		if (send(fd, BUF_CAST mb->buf + mb->pos, mb->end - mb->pos,
-			 0) < 0)
+		if (send(fd, BUF_CAST mb->buf + mb->pos, mb->end - mb->pos, 0) < 0)
 			return errno;
 	}
 	else {
-		if (sendto(fd, BUF_CAST mb->buf + mb->pos, mb->end - mb->pos,
-			   0, &dst->u.sa, dst->len) < 0)
-			return errno;
+        if ((err = sendto(fd, BUF_CAST mb->buf + mb->pos, mb->end - mb->pos, 0, &dst->u.sa, dst->len)) < 0) {
+#ifdef WIN32
+            err = WSAGetLastError();
+#endif
+            char buf[32];
+            inet_ntop(sa_af(dst), &dst->u.in.sin_addr, buf, 32);
+            printf("sendto err %d on sock %d: %zd bytes to %s:%u\n", err, fd, mb->end - mb->pos, buf, sa_port(dst));
+            return err;
+        }
 	}
 
 	return 0;

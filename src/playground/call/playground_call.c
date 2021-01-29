@@ -24,7 +24,7 @@ int main(void)
 
     RAWR_GUARD_CLEANUP(rawr_Call_Stop(rawrcall));
 
-    rawr_Call_Cleaup(rawrcall);
+    rawr_Call_Cleanup(rawrcall);
 
     rawr_Net_Cleanup();
 
