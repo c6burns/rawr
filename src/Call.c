@@ -776,7 +776,7 @@ int rawr_Call_Setup(rawr_Call **out_call, const char *sipRegistrar, const char *
 }
 
 // --------------------------------------------------------------------------------------------------------------
-void rawr_Call_Cleaup(rawr_Call *call)
+void rawr_Call_Cleanup(rawr_Call *call)
 {
     RAWR_ASSERT(call);
     mn_thread_cleanup(&call->sipThread);
