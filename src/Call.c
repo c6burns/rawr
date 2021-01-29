@@ -25,7 +25,6 @@ typedef struct rawr_Call {
     mn_atomic_t threadExiting;
 
     struct sip *reSip;
-    struct rtp_sock *reRtp;
     struct udp_sock *reRtpSock;
     struct sipreg *reSipReg;
     struct sipsess *reSipSess;
@@ -33,6 +32,7 @@ typedef struct rawr_Call {
     struct sdp_session *reSdpSess;
     struct sipsess_sock *reSipSessSock;
 
+    char sipDial[RAWR_CALL_SIPARG_MAX];
     char sipURI[RAWR_CALL_SIPARG_MAX];
     char sipName[RAWR_CALL_SIPARG_MAX];
     char sipRegistrar[RAWR_CALL_SIPARG_MAX];
@@ -133,7 +133,6 @@ void rawr_Call_RtpSendThread(void *arg)
         call->rtpBytesSend += RAWR_CALL_UDP_OVERHEAD_BYTES;
 
         RAWR_GUARD_CLEANUP(udp_send(call->reRtpSock, sdp_media_raddr(call->reSdpMedia), re_mb) < 0);
-        RAWR_GUARD_CLEANUP(rtp_send(call->reRtp, sdp_media_raddr(call->reSdpMedia), 0, marker, rtp_type, call->rtpTime, re_mb) < 0);
 
         tstamp = mn_tstamp();
         if ((tstamp - tstamp_last) > rtp_wait_ns) {
@@ -607,7 +606,7 @@ void rawr_Call_SipThread(void *arg)
         goto cleanup;
     }
 
-    //err = sip_transp_add(call->reSip, SIP_TRANSP_TLS, &localSipSA, sip_tls);
+    err = sip_transp_add(call->reSip, SIP_TRANSP_TLS, &localSipSA, sip_tls);
     err = sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localSipSA);
     if (err) {
         mn_log_error("transport error: %s", strerror(err));
@@ -633,15 +632,9 @@ void rawr_Call_SipThread(void *arg)
 
     err = udp_listen(&call->reRtpSock, &localRtpSA, rawr_Call_OnUdpRecv, (void *)call);
     if (err) {
-        mn_log_error("rtp listen error: %m", err);
+        mn_log_error("rtp udp_listen error: %m", err);
         goto cleanup;
     }
-    //err = rtp_listen(&call->reRtp, IPPROTO_UDP, &localRtpSA, 16384, 32767, true, rawr_Call_OnRtp, rawr_Call_OnRtcp, call);
-    //if (err) {
-    //    mn_log_error("rtp listen error: %m", err);
-    //    goto cleanup;
-    //}
-    //mn_log_info("local RTP port is %u", sa_port(rtp_local(call->reRtp)));
 
     /* create SDP session */
     err = sdp_session_alloc(&call->reSdpSess, &localRtpSA);
