@@ -280,6 +280,26 @@ rawr_AudioStreamPriv *rawr_AudioStream_Priv(rawr_AudioStream *stream)
 // private ------------------------------------------------------------------------------------------------------
 int rawr_AudioStream_AudioCallback(const void *inputBuffer, void *outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo *timeInfo, PaStreamCallbackFlags statusFlags, void *userData)
 {
+    if (statusFlags & paPrimingOutput) {
+        /* emit silence and do not read the input */
+        mn_log_info("paPrimingOutput");
+        memset(outputBuffer, 0, framesPerBuffer * sizeof(rawr_AudioSample));
+        return paContinue;
+    }
+
+    if (statusFlags & paInputUnderflow) {
+        mn_log_info("paInputUnderflow");
+    }
+    if (statusFlags & paInputOverflow) {
+        mn_log_info("paInputOverflow");
+    }
+    if (statusFlags & paOutputUnderflow) {
+        mn_log_info("paOutputUnderflow");
+    }
+    if (statusFlags & paOutputOverflow) {
+        mn_log_info("paOutputOverflow");
+    }
+
     rawr_AudioStream *stream = (rawr_AudioStream *)userData;
     RAWR_ASSERT(stream);
     rawr_AudioStreamPriv *priv = rawr_AudioStream_Priv(stream);
