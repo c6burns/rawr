@@ -65,6 +65,32 @@ rawr_CallState rawr_Call_State(rawr_Call *call);
 void rawr_Call_SetExiting(rawr_Call *call);
 int rawr_Call_Exiting(rawr_Call *call);
 
+// private ------------------------------------------------------------------------------------------------------
+void rawr_Call_Reset(rawr_Call *call)
+{
+    RAWR_ASSERT(call);
+
+    mn_atomic_store(&call->threadExiting, 0);
+
+    call->rtpHandlerIntialized = 0;
+    call->rtpReceiver = 0;
+
+    call->rtpBytesSend = 0;
+    call->rtpBytesRecv = 0;
+    call->rtpTime = 0;
+
+    mn_atomic_store(&call->rtpSendTotal, 0);
+    mn_atomic_store(&call->rtpRecvTotal, 0);
+    mn_atomic_store(&call->rtpSendRate, 0);
+    mn_atomic_store(&call->rtpRecvRate, 0);
+
+    mn_atomic_store(&call->rtpRecvCount, 0);
+    call->rtpLastRecvTime = 0;
+
+    memset(call->inputSamples, 0, sizeof(call->inputSamples));
+    memset(call->outputSamples, 0, sizeof(call->outputSamples));
+}
+
 
 // private thread -----------------------------------------------------------------------------------------------
 void rawr_Call_RtpSendThread(void *arg)
@@ -742,7 +768,7 @@ void rawr_Call_SipThread(void *arg)
 cleanup:
 
     mem_deref(call->reSdpSess); /* will also free sdp_media */
-    //mem_deref(call->reRtp);
+    mem_deref(call->reRtpSock);
     mem_deref(call->reSipSessSock);
     mem_deref(call->reSip);
     mem_deref(dnsClient);
@@ -778,6 +804,8 @@ void rawr_Call_Cleanup(rawr_Call *call)
 int rawr_Call_Start(rawr_Call *call, const char *sipInviteURI)
 {
     RAWR_ASSERT(call);
+
+    rawr_Call_Reset(call);
 
     snprintf(call->sipInviteURI, RAWR_CALL_SIPARG_MAX, "%s", sipInviteURI);
 
