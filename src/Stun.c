@@ -2,6 +2,7 @@
 
 #include "rawr/Error.h"
 
+#include "mn/allocator.h"
 #include "mn/log.h"
 #include "mn/thread.h"
 
@@ -12,14 +13,28 @@ struct rawr_StunResponse {
     rawr_Endpoint *endpoint;
 };
 
-// --------------------------------------------------------------------------------------------------------------
-void stun_handler(struct stun_msg *msg, void *arg)
+typedef struct rawr_StunClient {
+    struct udp_sock *udpSock;
+    struct stun *re_stun;
+    struct sa sa_srv;
+} rawr_StunClient;
+
+
+static void udp_recv_handler(const struct sa *src, struct mbuf *mb, void *arg)
 {
-    int abc = 123;
+    struct stun *stun = arg;
+    (void)src;
+
+    (void)stun_recv(stun, mb);
 }
 
 // --------------------------------------------------------------------------------------------------------------
-void stun_response_handler(int err, uint16_t scode, const char *reason, const struct stun_msg *msg, void *arg)
+void rawr_StunClient_Handler(struct stun_msg *msg, void *arg)
+{
+}
+
+// --------------------------------------------------------------------------------------------------------------
+void rawr_StunClient_ResponseHandler(int err, uint16_t scode, const char *reason, const struct stun_msg *msg, void *arg)
 {
     struct rawr_StunResponse *resp = (struct rawr_StunResponse *)arg;
     struct stun_attr *attr;
@@ -41,23 +56,63 @@ cleanup:
 }
 
 // --------------------------------------------------------------------------------------------------------------
-int rawr_StunClient_BindingRequest(rawr_Endpoint *stunServer, rawr_Endpoint *out_endpoint)
+int rawr_StunClient_Setup(rawr_StunClient **out_client)
 {
+    RAWR_ASSERT(out_client);
+
+    RAWR_GUARD_NULL(*out_client = MN_MEM_ACQUIRE(sizeof(**out_client)));
+
+    int err;
+    struct sa localSA;
+    time_t t;
+    srand((unsigned)time(&t));
+    uint16_t localPort = (rand() % 16383) + 16384;
+    
+    RAWR_GUARD_CLEANUP(stun_alloc(&(*out_client)->re_stun, NULL, rawr_StunClient_Handler, *out_client));
+
+    net_default_source_addr_get(AF_INET, &localSA);
+    sa_set_port(&localSA, localPort);
+    err = udp_listen(&(*out_client)->udpSock, &localSA, udp_recv_handler, (*out_client)->re_stun);
+    if (err) {
+        mn_log_error("rtp udp_listen error: %m", err);
+        goto cleanup;
+    }
+
+    re_printf("local UDP address: %J\n", &localSA);
+
+    return rawr_Success;
+
+cleanup:
+    MN_MEM_RELEASE(*out_client);
+    return rawr_Error;
+}
+
+// --------------------------------------------------------------------------------------------------------------
+void rawr_StunClient_Cleanup(rawr_StunClient *client)
+{
+    RAWR_ASSERT(client);
+    mem_deref(client->re_stun);
+    mem_deref(client->udpSock);
+    MN_MEM_RELEASE(client);
+}
+
+// --------------------------------------------------------------------------------------------------------------
+int rawr_StunClient_BindingRequest(rawr_StunClient *client, rawr_Endpoint *stunServer, rawr_Endpoint *out_endpoint)
+{
+    RAWR_ASSERT(client);
+
     struct stun *re_stun;
     struct sa sa_srv;
-    struct rawr_StunResponse resp = {
-        .returnValue = rawr_Error,
-        .endpoint = out_endpoint,
-    };
+    struct rawr_StunResponse resp;
 
+    resp.returnValue = rawr_Error;
+    resp.endpoint = out_endpoint,
     memset(out_endpoint, 0, sizeof(*out_endpoint));
 
-    sa_init(&sa_srv, AF_INET);
-    RAWR_GUARD_CLEANUP(sa_set_sa(&sa_srv, rawr_Endpoint_SockAddr(stunServer)));
+    sa_init(&client->sa_srv, AF_INET);
+    RAWR_GUARD_CLEANUP(sa_set_sa(&client->sa_srv, rawr_Endpoint_SockAddr(stunServer)));
 
-    RAWR_GUARD_CLEANUP(stun_alloc(&re_stun, NULL, stun_handler, NULL));
-
-    RAWR_GUARD_CLEANUP(stun_request(NULL, re_stun, IPPROTO_UDP, NULL, &sa_srv, 0, STUN_METHOD_BINDING, NULL, 0, false, stun_response_handler, &resp, 1, STUN_ATTR_SOFTWARE, "RAWR!"));
+    RAWR_GUARD_CLEANUP(stun_request(NULL, client->re_stun, IPPROTO_UDP, client->udpSock, &client->sa_srv, 0, STUN_METHOD_BINDING, NULL, 0, false, rawr_StunClient_ResponseHandler, &resp, 1, STUN_ATTR_SOFTWARE, "RAWR!"));
 
     RAWR_GUARD_CLEANUP(re_main(NULL));
 
