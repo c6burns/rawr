@@ -32,7 +32,7 @@ typedef struct rawr_Call {
     struct sdp_session *reSdpSess;
     struct sipsess_sock *reSipSessSock;
 
-    char sipDial[RAWR_CALL_SIPARG_MAX];
+    char sipInviteURI[RAWR_CALL_SIPARG_MAX];
     char sipURI[RAWR_CALL_SIPARG_MAX];
     char sipName[RAWR_CALL_SIPARG_MAX];
     char sipRegistrar[RAWR_CALL_SIPARG_MAX];
@@ -64,6 +64,32 @@ void rawr_Call_SetState(rawr_Call *call, rawr_CallState callState);
 rawr_CallState rawr_Call_State(rawr_Call *call);
 void rawr_Call_SetExiting(rawr_Call *call);
 int rawr_Call_Exiting(rawr_Call *call);
+
+// private ------------------------------------------------------------------------------------------------------
+void rawr_Call_Reset(rawr_Call *call)
+{
+    RAWR_ASSERT(call);
+
+    mn_atomic_store(&call->threadExiting, 0);
+
+    call->rtpHandlerIntialized = 0;
+    call->rtpReceiver = 0;
+
+    call->rtpBytesSend = 0;
+    call->rtpBytesRecv = 0;
+    call->rtpTime = 0;
+
+    mn_atomic_store(&call->rtpSendTotal, 0);
+    mn_atomic_store(&call->rtpRecvTotal, 0);
+    mn_atomic_store(&call->rtpSendRate, 0);
+    mn_atomic_store(&call->rtpRecvRate, 0);
+
+    mn_atomic_store(&call->rtpRecvCount, 0);
+    call->rtpLastRecvTime = 0;
+
+    memset(call->inputSamples, 0, sizeof(call->inputSamples));
+    memset(call->outputSamples, 0, sizeof(call->outputSamples));
+}
 
 
 // private thread -----------------------------------------------------------------------------------------------
@@ -545,7 +571,6 @@ void rawr_Call_SipThread(void *arg)
     uint32_t nameServerCount;
     int err;
     rawr_Call *call = (rawr_Call *)arg;
-    const char *sipInviteURI = "sip:3300@sip.serverlynx.net";
 
     rawr_Call_SetState(call, rawr_CallState_Started);
 
@@ -667,7 +692,7 @@ void rawr_Call_SipThread(void *arg)
     err = sipsess_connect(
         &call->reSipSess,
         call->reSipSessSock,
-        sipInviteURI,
+        call->sipInviteURI,
         call->sipName,
         call->sipURI,
         call->sipName,
@@ -719,7 +744,7 @@ void rawr_Call_SipThread(void *arg)
         goto cleanup;
     }
 
-    mn_log_info("inviting <%s>...", sipInviteURI);
+    mn_log_info("inviting <%s>...", call->sipInviteURI);
 
     /* execute sip signalling until complete */
     err = re_main(rawr_Call_OnSignal);
@@ -743,7 +768,7 @@ void rawr_Call_SipThread(void *arg)
 cleanup:
 
     mem_deref(call->reSdpSess); /* will also free sdp_media */
-    //mem_deref(call->reRtp);
+    mem_deref(call->reRtpSock);
     mem_deref(call->reSipSessSock);
     mem_deref(call->reSip);
     mem_deref(dnsClient);
@@ -776,9 +801,13 @@ void rawr_Call_Cleanup(rawr_Call *call)
 }
 
 // --------------------------------------------------------------------------------------------------------------
-int rawr_Call_Start(rawr_Call *call)
+int rawr_Call_Start(rawr_Call *call, const char *sipInviteURI)
 {
     RAWR_ASSERT(call);
+
+    rawr_Call_Reset(call);
+
+    snprintf(call->sipInviteURI, RAWR_CALL_SIPARG_MAX, "%s", sipInviteURI);
 
     rawr_Call_SetState(call, rawr_CallState_Starting);
     RAWR_GUARD(mn_thread_launch(&call->sipThread, rawr_Call_SipThread, (void*)call));

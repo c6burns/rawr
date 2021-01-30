@@ -25,7 +25,10 @@ rawr_CallState rawr_Call_State(rawr_Call *call);
 int rawr_Call_Setup(rawr_Call **out_call, const char *sipRegistrar, const char *sipURI, const char *sipName, const char *sipUsername, const char *sipPassword);
 void rawr_Call_Cleanup(rawr_Call *call);
 
-int rawr_Call_Start(rawr_Call *call);
+/* dial */
+int rawr_Call_Start(rawr_Call *call, const char *sipInviteURI);
+
+/* hangup */
 int rawr_Call_Stop(rawr_Call *call);
 
 int rawr_Call_BlockOnCall(rawr_Call *call);
