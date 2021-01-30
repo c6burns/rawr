@@ -8,17 +8,22 @@
 
 int main(void)
 {
+    char ipstr[255];
+    uint16_t port;
     int err;
     rawr_Endpoint epStunServ, epExternal;
 
     RAWR_GUARD_CLEANUP(err = rawr_Net_Setup());
 
-    rawr_Endpoint_SetBytes(&epStunServ, 74, 125, 197, 127, 19302);
-
+    rawr_Endpoint_SetBytes(&epStunServ, 35, 170, 178, 149, 3478);
     RAWR_GUARD_CLEANUP(err = rawr_StunClient_BindingRequest(&epStunServ, &epExternal));
+    
+    RAWR_GUARD_CLEANUP(err = rawr_Endpoint_String(&epExternal, &port, ipstr, 255));
+    mn_log_info("%s:%u", ipstr, port);
 
-    char ipstr[255];
-    uint16_t port;
+    rawr_Endpoint_SetBytes(&epStunServ, 3, 223, 157, 6, 3478);
+    RAWR_GUARD_CLEANUP(err = rawr_StunClient_BindingRequest(&epStunServ, &epExternal));
+    
     RAWR_GUARD_CLEANUP(err = rawr_Endpoint_String(&epExternal, &port, ipstr, 255));
     mn_log_info("%s:%u", ipstr, port);
 
