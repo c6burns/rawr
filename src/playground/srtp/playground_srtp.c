@@ -25,7 +25,7 @@
 #endif
 #ifdef HAVE_NETINET_IN_H
 #    include <netinet/in.h>
-#elif defined HAVE_WINSOCK2_H
+#elif defined(_WIN32)
 #    include <winsock2.h>
 #    include <ws2tcpip.h>
 #    define RTPW_USE_WINSOCK2 1
@@ -580,7 +580,10 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t local
         local.sin_port = htons(local_port);
         ret = bind(sock, (struct sockaddr *)&local, sizeof(struct sockaddr_in));
         if (ret < 0) {
-            mn_log_error("bind failed on port %u: %d", local_port, WSAGetLastError());
+#ifdef _WIN32
+            ret = WSAGetLastError();
+#endif
+            mn_log_error("bind failed on port %u: %d", local_port, ret);
             perror("");
             return;
         }
@@ -662,7 +665,10 @@ void rtp_session_run(program_type prog_type, const char *address, uint16_t local
         local.sin_port = htons(local_port);
         ret = bind(sock, (struct sockaddr *)&local, sizeof(struct sockaddr_in));
         if (ret < 0) {
-            mn_log_error("bind failed on port %u: %d", local_port, WSAGetLastError());
+#ifdef _WIN32
+            ret = WSAGetLastError();
+#endif
+            mn_log_error("bind failed on port %u: %d", local_port, ret);
             perror("");
             return;
         }

@@ -55,7 +55,7 @@
 
 #ifdef HAVE_NETINET_IN_H
 #include <netinet/in.h>
-#elif defined HAVE_WINSOCK2_H
+#elif defined(_WIN32)
 #include <winsock2.h>
 #endif
 
