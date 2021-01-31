@@ -253,11 +253,13 @@ static void udp_read_handler6(int flags, void *arg)
  *
  * @return 0 if success, otherwise errorcode
  */
-int udp_listen(struct udp_sock **usp, const struct sa *local,
+int udp_listen(struct udp_sock **usp, struct sa *local,
 	       udp_recv_h *rh, void *arg)
 {
 	struct addrinfo hints, *res = NULL, *r;
 	struct udp_sock *us = NULL;
+    struct sockaddr_in in_addr;
+    int localSAsize = sizeof(in_addr);
 	char addr[64];
 	char serv[6] = "0";
 	int af, error, err = 0;
@@ -335,6 +337,16 @@ int udp_listen(struct udp_sock **usp, const struct sa *local,
 			(void)close(fd);
 			continue;
 		}
+
+        /* if we were passed a local address and the port is 0 ... fill in the port (breaking const, but oh well) */
+        if (local && sa_port(local) == 0) {
+            if (getsockname(fd, (struct sockaddr *)&in_addr, &localSAsize) != 0) {
+                err = errno;
+                (void)close(fd);
+                continue;
+            }
+            local->u.in.sin_port = in_addr.sin_port;
+        }
 
 		/* Can we do both IPv4 and IPv6 on same socket? */
 		if (AF_INET6 == r->ai_family) {
