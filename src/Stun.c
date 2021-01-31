@@ -17,6 +17,7 @@ typedef struct rawr_StunClient {
     struct udp_sock *udpSock;
     struct stun *re_stun;
     struct sa sa_srv;
+    struct sa sa_local;
 } rawr_StunClient;
 
 
@@ -60,25 +61,24 @@ int rawr_StunClient_Setup(rawr_StunClient **out_client)
 {
     RAWR_ASSERT(out_client);
 
-    RAWR_GUARD_NULL(*out_client = MN_MEM_ACQUIRE(sizeof(**out_client)));
-
     int err;
-    struct sa localSA;
-    time_t t;
-    srand((unsigned)time(&t));
-    uint16_t localPort = (rand() % 16383) + 16384;
-    
+
+    RAWR_GUARD_NULL(*out_client = MN_MEM_ACQUIRE(sizeof(**out_client)));
+    memset(*out_client, 0, sizeof(**out_client));
+
     RAWR_GUARD_CLEANUP(stun_alloc(&(*out_client)->re_stun, NULL, rawr_StunClient_Handler, *out_client));
 
-    net_default_source_addr_get(AF_INET, &localSA);
-    sa_set_port(&localSA, localPort);
-    err = udp_listen(&(*out_client)->udpSock, &localSA, udp_recv_handler, (*out_client)->re_stun);
+    err = net_default_source_addr_get(AF_INET, &(*out_client)->sa_local);
     if (err) {
-        mn_log_error("rtp udp_listen error: %m", err);
+        mn_log_error("net_default_source_addr_get failed");
         goto cleanup;
     }
 
-    re_printf("local UDP address: %J\n", &localSA);
+    err = udp_listen(&(*out_client)->udpSock, &(*out_client)->sa_local, udp_recv_handler, (*out_client)->re_stun);
+    if (err) {
+        mn_log_error("udp_listen failed");
+        goto cleanup;
+    }
 
     return rawr_Success;
 
@@ -94,6 +94,16 @@ void rawr_StunClient_Cleanup(rawr_StunClient *client)
     mem_deref(client->re_stun);
     mem_deref(client->udpSock);
     MN_MEM_RELEASE(client);
+}
+
+// --------------------------------------------------------------------------------------------------------------
+int rawr_StunClient_LocalEndpoint(rawr_StunClient *client, rawr_Endpoint *out_endpoint)
+{
+    RAWR_ASSERT(client && out_endpoint);
+
+    RAWR_GUARD(rawr_Endpoint_SetSockAddr(out_endpoint, &client->sa_local.u.in));
+
+    return rawr_Success;
 }
 
 // --------------------------------------------------------------------------------------------------------------
