@@ -198,7 +198,7 @@ endif()
 #
 # dynamic shared object
 
-add_library(rawrDSO MODULE src/dso/dso.c)
+add_library(rawrDSO MODULE ${RAWR_SRC})
 target_compile_definitions(rawrDSO PRIVATE RAWR_EXPORTS)
 target_link_libraries(rawrDSO ${RAWR_LINK_LIBS})
 target_include_directories(rawrDSO PRIVATE ${RAWR_INCLUDE_DIRS})
@@ -210,6 +210,7 @@ macro(rawr_add_library rname)
     add_library(${rname} ${ARGN})
     target_link_libraries(${rname} ${RAWR_LINK_LIBS})
     target_include_directories(${rname} PRIVATE ${RAWR_INCLUDE_DIRS})
+    target_compile_definitions(${rname} PRIVATE RAWR_STATIC)
 endmacro()
 
 rawr_add_library(rawr ${RAWR_SRC})
@@ -219,7 +220,7 @@ rawr_add_library(rawr ${RAWR_SRC})
 
 macro(rawr_add_executable rname)
     add_executable(${rname} ${ARGN})
-    target_compile_definitions(${rname} PRIVATE ${RE_DEFINES})
+    target_compile_definitions(${rname} PRIVATE ${RE_DEFINES} RAWR_STATIC)
 	target_link_libraries(${rname} rawr ${RAWR_LINK_LIBS})
     target_include_directories(${rname} PRIVATE ${RAWR_INCLUDE_DIRS})
 endmacro()
