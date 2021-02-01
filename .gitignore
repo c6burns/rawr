@@ -1,5 +1,6 @@
 # cmake - common build dir names
 build*/
+CMakeBuild/
 out/
 
 # vs and vscode
