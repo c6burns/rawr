@@ -5,22 +5,37 @@
 #include "mn/log.h"
 #include "mn/thread.h"
 
+rawr_StunClient *stunClient = NULL;
+rawr_Endpoint localEndpoint = {0};
 
 int main(void)
 {
+    char ipstr[255];
+    uint16_t port;
     int err;
     rawr_Endpoint epStunServ, epExternal;
 
     RAWR_GUARD_CLEANUP(err = rawr_Net_Setup());
 
-    rawr_Endpoint_SetBytes(&epStunServ, 74, 125, 197, 127, 19302);
+    RAWR_GUARD_CLEANUP(err = rawr_StunClient_Setup(&stunClient));
 
-    RAWR_GUARD_CLEANUP(err = rawr_StunClient_BindingRequest(&epStunServ, &epExternal));
+    RAWR_GUARD_CLEANUP(err = rawr_StunClient_LocalEndpoint(stunClient, &localEndpoint));
+    RAWR_GUARD_CLEANUP(err = rawr_Endpoint_String(&localEndpoint, &port, ipstr, 255));
+    mn_log_info("  Local: %s:%u", ipstr, port);
 
-    char ipstr[255];
-    uint16_t port;
+    rawr_Endpoint_SetBytes(&epStunServ, 35, 170, 178, 149, 3478);
+    RAWR_GUARD_CLEANUP(err = rawr_StunClient_BindingRequest(stunClient, &epStunServ, &epExternal));
+    
     RAWR_GUARD_CLEANUP(err = rawr_Endpoint_String(&epExternal, &port, ipstr, 255));
-    mn_log_info("%s:%u", ipstr, port);
+    mn_log_info("Remote0: %s:%u", ipstr, port);
+
+    rawr_Endpoint_SetBytes(&epStunServ, 54, 205, 30, 204, 3478);
+    RAWR_GUARD_CLEANUP(err = rawr_StunClient_BindingRequest(stunClient, &epStunServ, &epExternal));
+    
+    RAWR_GUARD_CLEANUP(err = rawr_Endpoint_String(&epExternal, &port, ipstr, 255));
+    mn_log_info("Remote1: %s:%u", ipstr, port);
+
+    rawr_StunClient_Cleanup(stunClient);
 
     err = 0;
 
