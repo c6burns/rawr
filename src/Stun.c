@@ -20,8 +20,8 @@ typedef struct rawr_StunClient {
     struct sa sa_local;
 } rawr_StunClient;
 
-
-static void udp_recv_handler(const struct sa *src, struct mbuf *mb, void *arg)
+// private handler ----------------------------------------------------------------------------------------------
+void rawr_StunClient_UdpHandler(const struct sa *src, struct mbuf *mb, void *arg)
 {
     struct stun *stun = arg;
     (void)src;
@@ -29,12 +29,14 @@ static void udp_recv_handler(const struct sa *src, struct mbuf *mb, void *arg)
     (void)stun_recv(stun, mb);
 }
 
-// --------------------------------------------------------------------------------------------------------------
-void rawr_StunClient_Handler(struct stun_msg *msg, void *arg)
+// private handler ----------------------------------------------------------------------------------------------
+void rawr_StunClient_IndicatorHandler(struct stun_msg *msg, void *arg)
 {
+    (void)msg;
+    (void)arg;
 }
 
-// --------------------------------------------------------------------------------------------------------------
+// private handler ----------------------------------------------------------------------------------------------
 void rawr_StunClient_ResponseHandler(int err, uint16_t scode, const char *reason, const struct stun_msg *msg, void *arg)
 {
     struct rawr_StunResponse *resp = (struct rawr_StunResponse *)arg;
@@ -57,7 +59,7 @@ cleanup:
 }
 
 // --------------------------------------------------------------------------------------------------------------
-int rawr_StunClient_Setup(rawr_StunClient **out_client)
+RAWR_API int RAWR_CALL rawr_StunClient_Setup(rawr_StunClient **out_client)
 {
     RAWR_ASSERT(out_client);
 
@@ -66,7 +68,7 @@ int rawr_StunClient_Setup(rawr_StunClient **out_client)
     RAWR_GUARD_NULL(*out_client = MN_MEM_ACQUIRE(sizeof(**out_client)));
     memset(*out_client, 0, sizeof(**out_client));
 
-    RAWR_GUARD_CLEANUP(stun_alloc(&(*out_client)->re_stun, NULL, rawr_StunClient_Handler, *out_client));
+    RAWR_GUARD_CLEANUP(stun_alloc(&(*out_client)->re_stun, NULL, rawr_StunClient_IndicatorHandler, *out_client));
 
     err = net_default_source_addr_get(AF_INET, &(*out_client)->sa_local);
     if (err) {
@@ -74,7 +76,7 @@ int rawr_StunClient_Setup(rawr_StunClient **out_client)
         goto cleanup;
     }
 
-    err = udp_listen(&(*out_client)->udpSock, &(*out_client)->sa_local, udp_recv_handler, (*out_client)->re_stun);
+    err = udp_listen(&(*out_client)->udpSock, &(*out_client)->sa_local, rawr_StunClient_UdpHandler, (*out_client)->re_stun);
     if (err) {
         mn_log_error("udp_listen failed");
         goto cleanup;
@@ -88,7 +90,7 @@ cleanup:
 }
 
 // --------------------------------------------------------------------------------------------------------------
-void rawr_StunClient_Cleanup(rawr_StunClient *client)
+RAWR_API void RAWR_CALL rawr_StunClient_Cleanup(rawr_StunClient *client)
 {
     RAWR_ASSERT(client);
     mem_deref(client->re_stun);
@@ -97,7 +99,7 @@ void rawr_StunClient_Cleanup(rawr_StunClient *client)
 }
 
 // --------------------------------------------------------------------------------------------------------------
-int rawr_StunClient_LocalEndpoint(rawr_StunClient *client, rawr_Endpoint *out_endpoint)
+RAWR_API int RAWR_CALL rawr_StunClient_LocalEndpoint(rawr_StunClient *client, rawr_Endpoint *out_endpoint)
 {
     RAWR_ASSERT(client && out_endpoint);
 
@@ -107,7 +109,7 @@ int rawr_StunClient_LocalEndpoint(rawr_StunClient *client, rawr_Endpoint *out_en
 }
 
 // --------------------------------------------------------------------------------------------------------------
-int rawr_StunClient_BindingRequest(rawr_StunClient *client, rawr_Endpoint *stunServer, rawr_Endpoint *out_endpoint)
+RAWR_API int RAWR_CALL rawr_StunClient_BindingRequest(rawr_StunClient *client, rawr_Endpoint *stunServer, rawr_Endpoint *out_endpoint)
 {
     RAWR_ASSERT(client);
 
