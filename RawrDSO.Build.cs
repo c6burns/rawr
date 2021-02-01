@@ -1,15 +1,16 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+using System;
 using System.IO;
 using UnrealBuildTool;
 
-public class Rawr : ModuleRules
+public class RawrDSO : ModuleRules
 {
 	string SourceDirectory { get { return ModuleDirectory; } }
 	string BuildDirectory { get { return Path.Combine(SourceDirectory, "CMakeBuild"); } }
 	string OutputDirectory { get { return Path.Combine(BuildDirectory, "Release"); } }
 
-	public Rawr(ReadOnlyTargetRules Target) : base(Target)
+	public RawrDSO(ReadOnlyTargetRules Target) : base(Target)
 	{
 		Type = ModuleType.External;
 
@@ -32,22 +33,22 @@ public class Rawr : ModuleRules
         else if (Target.Platform == UnrealTargetPlatform.Mac)
         {
             PublicDelayLoadDLLs.Add(Path.Combine(ModuleDirectory, "Mac", "Release", "librawrDSO.dylib"));
-            RuntimeDependencies.Add("$(PluginDir)/Source/ThirdParty/Test3PLibrary/Mac/Release/librawrDSO.dylib");
+            RuntimeDependencies.Add("$(PluginDir)/Source/ThirdParty/rawrDSO/Mac/Release/librawrDSO.dylib");
         }
 	}
 
 	void PrintBanner()
 	{
-		System.Console.WriteLine(@"__________    _____  __      ____________");
-		System.Console.WriteLine(@"\______   \  /  _  \/  \    /  \______   \");
-		System.Console.WriteLine(@" |       _/ /  /_\  \   \/\/   /|       _/");
-		System.Console.WriteLine(@" |    |   \/    |    \        / |    |   \");
-		System.Console.WriteLine(@" |____|_  /\____|__  /\__/\  /  |____|_  /");
-		System.Console.WriteLine(@"        \/         \/      \/          \/ ");
-		System.Console.WriteLine(@"RAWR: VoIP Utilities for TLM Partners Inc.");
-		System.Console.WriteLine(@"");
-		System.Console.WriteLine(@"Please be patient while CMake builds ... ");
-		System.Console.WriteLine(@"");
+		Console.WriteLine(@"__________    _____  __      ____________");
+		Console.WriteLine(@"\______   \  /  _  \/  \    /  \______   \");
+		Console.WriteLine(@" |       _/ /  /_\  \   \/\/   /|       _/");
+		Console.WriteLine(@" |    |   \/    |    \        / |    |   \");
+		Console.WriteLine(@" |____|_  /\____|__  /\__/\  /  |____|_  /");
+		Console.WriteLine(@"        \/         \/      \/          \/ ");
+		Console.WriteLine(@"RAWR: VoIP Utilities for TLM Partners Inc.");
+		Console.WriteLine(@"");
+		Console.WriteLine(@"Please be patient while CMake builds ... ");
+		Console.WriteLine(@"");
 	}
 
 	void CMakeConfigure(string buildType)
@@ -70,10 +71,9 @@ public class Rawr : ModuleRules
 
 	void ExecuteCMakeCommand(string args)
 	{
-		System.Console.WriteLine("cmake " + args);
+		Console.WriteLine("cmake " + args);
         try
         {
-			char[] buffer;
             System.Diagnostics.ProcessStartInfo procStartInfo = new System.Diagnostics.ProcessStartInfo("cmake", args);
             procStartInfo.RedirectStandardOutput = true;
             procStartInfo.UseShellExecute = false;
@@ -83,7 +83,7 @@ public class Rawr : ModuleRules
             proc.Start();
 			while (!proc.StandardOutput.EndOfStream)
 			{
-				System.Console.Write((char)proc.StandardOutput.Read());
+				Console.Write((char)proc.StandardOutput.Read());
 			}
         }
         catch
