@@ -6,18 +6,24 @@ using UnrealBuildTool;
 
 public class RawrDSO : ModuleRules
 {
+    string CMakeBuildType { get { return "Debug"; } }
 	string SourceDirectory { get { return ModuleDirectory; } }
 	string BuildDirectory { get { return Path.Combine(SourceDirectory, "CMakeBuild"); } }
-	string OutputDirectory { get { return Path.Combine(BuildDirectory, "Release"); } }
+	string OutputDirectory { get { return Path.Combine(BuildDirectory, CMakeBuildType); } }
 
-	public RawrDSO(ReadOnlyTargetRules Target) : base(Target)
-	{
-		Type = ModuleType.External;
+    public RawrDSO(ReadOnlyTargetRules Target) : base(Target)
+    {
+        Type = ModuleType.External;
 
-		const string buildType = "Release";
-		PrintBanner();
-		CMakeConfigure(buildType);
-		CMakeBuild(buildType);
+        PrintBanner();
+        CMakeConfigure(CMakeBuildType);
+        CMakeBuild(CMakeBuildType);
+
+        PublicDefinitions.Add("RAWR_BUILD_TYPE=\"" + CMakeBuildType + "\"");
+        if (CMakeBuildType == "Debug")
+        {
+            PublicDefinitions.Add("RAWR_DEBUG=1");
+        }
 
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
