@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(rawr LANGUAGES C)
+project(rawr LANGUAGES C CXX)
 include(ExternalProject)
 enable_testing()
 
@@ -215,6 +215,16 @@ endmacro()
 
 rawr_add_library(rawr ${RAWR_SRC})
 
+add_library(SocketSubsystem
+    src/SocketSubsystem/InternetAddr.h
+    src/SocketSubsystem/InternetAddr.cpp
+    src/SocketSubsystem/Socket.h
+    src/SocketSubsystem/Socket.cpp
+    src/SocketSubsystem/SocketSubsystem.h
+    src/SocketSubsystem/SocketSubsystem.cpp
+    src/SocketSubsystem/Types.h
+)
+
 #
 # executable
 
@@ -295,6 +305,19 @@ if (TARGET re)
     rawr_add_executable(playground_tcp src/playground/re/playground_tcp.c)
     rawr_add_executable(playground_udp src/playground/re/playground_udp.c)
     rawr_add_executable(playground_ws src/playground/re/playground_ws.c)
+    rawr_add_executable(playground_signal src/playground/re/playground_signal.cpp)
+
+    rawr_add_executable(signaller
+        src/signaller/main.cpp
+        src/signaller/SignalChannel.h
+        src/signaller/SignalPeer.h
+        src/signaller/PeerManager.h
+        src/signaller/PeerManager.cpp
+    )
+
+    rawr_add_executable(signallerTestClient
+        src/signallerTestClient/main.cpp
+    )
 
     add_custom_command(TARGET playground_re_sip POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/client.pem $<TARGET_FILE_DIR:playground_re_sip>

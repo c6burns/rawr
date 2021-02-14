@@ -64,7 +64,7 @@ static void recv_handler(struct mbuf *mb, void *arg)
     for (listEntry = list_head(&connl); listEntry; listEntry = listEntry->next) {
         otherConn = (struct conn *)listEntry->data;
 
-        if (senderConn == otherConn) continue;
+        //if (senderConn == otherConn) continue;
 
         (void)tcp_send(otherConn->tc, mb);
         re_printf("SEND %J -- %zu bytes\n", &otherConn->peer, mbuf_get_left(mb));
