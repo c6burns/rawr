@@ -1,15 +1,17 @@
 // Copyright: TLM Partners Inc. - 2021
 
+#include "PeerManager.h"
+#include "SignalChannel.h"
+#include "SignalPeer.h"
+
+#include "re.h"
+
 #include <cstdint>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include "re.h"
-
-#include "SignalChannel.h"
-#include "SignalPeer.h"
 
 std::map<SignalPeerId, std::shared_ptr<SignalPeer>> PeerManager::PeerMap;
 
@@ -73,7 +75,7 @@ void PeerManager::DisconnectPeer(SignalPeerId peerId)
 
 SignalChannel *PeerManager::CreateChannel(const char *channelIdString)
 {
-    if (!strlen(channelIdString)) {
+    if (!channelIdString || !strlen(channelIdString)) {
         return NULL;
     }
 
