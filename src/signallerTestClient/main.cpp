@@ -2,8 +2,6 @@
 
 #include "re.h"
 
-#include <string.h>
-
 #include <map>
 #include <memory>
 #include <string>
