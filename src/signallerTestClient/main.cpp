@@ -7,13 +7,12 @@
 #include <string>
 #include <vector>
 
-#define CLIENT_TIMER_DELAY 1000
-#define CLIENT_COUNT 2
+#define CLIENT_TIMER_DELAY 5000
+#define CLIENT_LAUNCH_DELAY 10
+#define CLIENT_COUNT 100
 
 #define MBUF_MAX_SIZE 1024
 #define MBUF_MIN_SIZE 2
-
-#define CHANNEL_ID "scrubadub"
 
 enum class MessageID : uint8_t {
     None,
@@ -38,6 +37,7 @@ struct SignalClient {
     ClientState state;
     bool bCandidatesRcvd;
     bool bCandidatesSent;
+    char channelIdString[40];
 };
 
 static size_t g_clientsCompleted = 0;
@@ -93,8 +93,8 @@ static void timer_handler(void *arg)
         close_handler(0, client);
     } else if (client->state == ClientState::Connected) {
         mbuf_write_u8(mb, (uint8_t)MessageID::ChannelID);
-        mbuf_write_u8(mb, (uint8_t)strlen(CHANNEL_ID));
-        mbuf_write_str(mb, CHANNEL_ID);
+        mbuf_write_u8(mb, (uint8_t)strlen(client->channelIdString));
+        mbuf_write_str(mb, client->channelIdString);
         mbuf_set_pos(mb, 0);
         tcp_send(client->tcpConn, mb);
     } else if (client->state == ClientState::Exchanging) {
@@ -144,10 +144,6 @@ static void timer_handler(void *arg)
         tmr_start(&client->reTimer, CLIENT_TIMER_DELAY, timer_handler, client);
     } else if (client->state == ClientState::Completed) {
         close_handler(0, client);
-        g_clientsCompleted++;
-        if (g_clientsCompleted >= CLIENT_COUNT) {
-            re_cancel();
-        }
     }
 
     mem_deref(mb);
@@ -210,6 +206,62 @@ static void close_handler(int err, void *arg)
 
     tmr_cancel(&client->reTimer);
     mem_deref(client->tcpConn);
+
+    g_clientsCompleted++;
+    re_printf("%d clients completed\n", g_clientsCompleted);
+    if (g_clientsCompleted >= CLIENT_COUNT) {
+        re_cancel();
+    }
+}
+
+static int launchIndex = 0;
+static struct tmr launchTimer;
+static struct sa serverAddress;
+SignalClient client[CLIENT_COUNT] = {0};
+void launch_timer_handler(void *arg)
+{
+    (void)arg;
+    int err;
+    char strnumber[40] = {0};
+    itoa(CLIENT_COUNT + launchIndex, strnumber, 10);
+
+    re_printf("launching: %d and %d\n", launchIndex, launchIndex + 1);
+
+    client[launchIndex].id = 0;
+    client[launchIndex + 1].id = 1;
+
+    strcpy(client[launchIndex].channelIdString, "0000potatoes");
+    for (int c = 0; c < strlen(strnumber); c++) {
+        client[launchIndex].channelIdString[c] = strnumber[c];
+    }
+    strcpy(client[launchIndex + 1].channelIdString, client[launchIndex].channelIdString);
+
+    err = tcp_connect(&client[launchIndex].tcpConn, &serverAddress, establish_handler, recv_handler, close_handler, &client[launchIndex]);
+    if (err) {
+        re_printf("Unable to connect client%d to: %J\n", launchIndex, &serverAddress);
+        g_clientsCompleted++;
+        re_printf("%d clients completed\n", g_clientsCompleted);
+        if (g_clientsCompleted >= CLIENT_COUNT) {
+            re_cancel();
+        }
+    }
+
+    err = tcp_connect(&client[launchIndex + 1].tcpConn, &serverAddress, establish_handler, recv_handler, close_handler, &client[launchIndex + 1]);
+    if (err) {
+        re_printf("Unable to connect client%d to: %J\n", launchIndex + 1, &serverAddress);
+        g_clientsCompleted++;
+        re_printf("%d clients completed\n", g_clientsCompleted);
+        if (g_clientsCompleted >= CLIENT_COUNT) {
+            re_cancel();
+        }
+    }
+
+    launchIndex += 2;
+    if (launchIndex >= CLIENT_COUNT) {
+        tmr_cancel(&launchTimer);
+    } else {
+        tmr_start(&launchTimer, CLIENT_LAUNCH_DELAY, launch_timer_handler, NULL);
+    }
 }
 
 int main(void)
@@ -226,21 +278,11 @@ int main(void)
         re_fprintf(stderr, "re init failed: %s\n", strerror(err));
         goto out;
     }
-
-    struct sa serverAddress;
+    
     sa_set_str(&serverAddress, "127.0.0.1", 3456);
 
-    SignalClient client[CLIENT_COUNT] = {0};
-    for (int i = 0; i < CLIENT_COUNT; i++) {
-        client[i].id = i;
-
-        err = tcp_connect(&client[i].tcpConn, &serverAddress, establish_handler, recv_handler, close_handler, &client[i]);
-        if (err) {
-            re_printf("Unable to connect client%d to: %J", i, &serverAddress);
-            goto out;
-        }
-    }
-
+    tmr_start(&launchTimer, CLIENT_LAUNCH_DELAY, launch_timer_handler, NULL);
+    
     /* main loop */
     err = re_main(signal_handler);
 
