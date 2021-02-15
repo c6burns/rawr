@@ -9,12 +9,11 @@
 
 #include <re.h>
 
-#include <string.h>
-
+#include <cstring>
 #include <map>
 #include <memory>
-#include <vector>
 #include <string>
+#include <vector>
 
 #define MBUF_MAX_SIZE 1024
 
@@ -115,7 +114,7 @@ static const char *stringFromChannelState(ChannelState peerState)
     return "PeerState::Invalid";
 }
 
-static const char * stringFromPeerState(PeerState peerState)
+static const char *stringFromPeerState(PeerState peerState)
 {
     switch (peerState) {
     case PeerState::None:
@@ -214,11 +213,9 @@ static void recv_handler(struct mbuf *mb, void *arg)
                     tcp_send(it->second->reConn->tc, mb);
                 }
             }
-            
         }
     } else if (signalPeer->state == PeerState::Valid) {
     }
-    
 
     //tcp_send(otherConn->tc, mb);
     //re_printf("SEND %J -- %zu bytes\n", &otherConn->peer, mbuf_get_left(mb));

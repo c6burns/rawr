@@ -2,6 +2,7 @@
 
 #include "re.h"
 
+#include <cstring>
 #include <map>
 #include <memory>
 #include <string>
@@ -278,11 +279,11 @@ int main(void)
         re_fprintf(stderr, "re init failed: %s\n", strerror(err));
         goto out;
     }
-    
+
     sa_set_str(&serverAddress, "127.0.0.1", 3456);
 
     tmr_start(&launchTimer, CLIENT_LAUNCH_DELAY, launch_timer_handler, NULL);
-    
+
     /* main loop */
     err = re_main(signal_handler);
 

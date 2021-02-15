@@ -6,6 +6,7 @@
 
 #include "re.h"
 
+#include <cstring>
 #include <map>
 #include <memory>
 #include <string>
