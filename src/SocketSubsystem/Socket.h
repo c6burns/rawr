@@ -4,30 +4,27 @@
 
 class FInternetAddr;
 
+enum class FNetworkProtocolTypes {
+    None,
+    IPv4,
+};
+
+#define NAME_DGram ESocketType::SOCKTYPE_Datagram
+#define NAME_Stream ESocketType::SOCKTYPE_Streaming
+
 /**
  * This is our abstract base class that hides the platform specific socket implementation
  */
 class FSocket
 {
 protected:
-	ESocketType SocketType;
+    int64_t fd;
 
 public:
 
 	/** Default constructor. */
-	inline FSocket() :
-		SocketType(SOCKTYPE_Unknown)
-	{ }
-
-	/**
-	 * Specifies the type of socket being created
-	 *
-	 * @param InSocketType The type of socket being created
-	 * @param InSocketDescription The debug description of the socket
-	 * @param InSocketProtocol the protocol stack this socket should be created on.
-	 */
-	inline FSocket(ESocketType InSocketType) :
-		SocketType(InSocketType)
+	FSocket(int64_t sockFd) :
+		fd(sockFd)
 	{ }
 
 	/** Virtual destructor. */
@@ -324,14 +321,4 @@ public:
 	 */ 
 	virtual int32 GetPortNo();
 
-	/**
-	 * Get the type of protocol the socket is bound to
-	 *
-	 * @return Socket type.
-	 * @see GetDescription, GetPortNo
-	 */
-	ESocketType GetSocketType() const
-	{
-		return SocketType;
-	}
 };

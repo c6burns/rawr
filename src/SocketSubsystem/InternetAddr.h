@@ -8,31 +8,14 @@
 class FInternetAddr
 {
 protected:
+    struct sockaddr_in m_sockaddr;
+
 	/** Hidden on purpose */
-	FInternetAddr()
-	{
-	}
+    FInternetAddr();
 
 public:
 
-	virtual ~FInternetAddr() 
-	{
-	}
-
-	/**
-	 * Compares FInternetAddrs together, comparing the logical net addresses (endpoints)
-	 * of the data stored, rather than doing a memory comparison like the equality operator does.
-	 * If it is not explicitly implemented, this falls back to just doing the same behavior of the
-	 * comparison operator.
-	 *
-	 * @Param InAddr The address to compare with.
-	 *
-	 * @return true if the endpoint stored in this FInternetAddr is the same as the input.
-	 */
-	virtual bool CompareEndpoints(const FInternetAddr& InAddr) const
-	{
-		return *this == InAddr;
-	}
+	virtual ~FInternetAddr() {}
 
 	/**
 	 * Sets the ip address from a host byte order uint32
@@ -76,36 +59,6 @@ public:
 	 * Returns the port number from this address in host byte order
 	 */
 	virtual int32 GetPort() const;
-
-	/** 
-	 * Set Platform specific port data
-	 */
-	virtual void SetPlatformPort(int32 InPort)
-	{
-		SetPort(InPort);
-	}
-
-	/** 
-	 * Get platform specific port data.
-	 */
-	virtual int32 GetPlatformPort() const
-	{
-		return GetPort();
-	}
-
-	/**
-	 * Sets the ip address from a raw network byte order array.
-	 *
-	 * @param RawAddr the new address to use (must be converted to network byte order)
-	 */
-	//virtual void SetRawIp(const TArray<uint8>& RawAddr);
-
-	/**
-	 * Gets the ip address in a raw array stored in network byte order.
-	 *
-	 * @return The raw address stored in an array
-	 */
-	//virtual TArray<uint8> GetRawIp() const;
 
 	/** Sets the address to be any address */
 	virtual void SetAnyAddress();

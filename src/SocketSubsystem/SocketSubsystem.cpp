@@ -22,10 +22,20 @@ void ISocketSubsystem::Shutdown()
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------
-FSocket* ISocketSubsystem::CreateSocket(ESocketType SocketType)
+FSocket *ISocketSubsystem::CreateSocket(int ue4CompatName, const char *ue4CompatString, FNetworkProtocolTypes ue4CompatType)
 {
-    return nullptr;
+    int64 fd = 0;
+    if (ue4CompatName == NAME_DGram) {
+        fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    } else if (ue4CompatName == NAME_Stream) {
+        fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    } else {
+        return nullptr;
+    }
+
+    return new FSocket(fd);
 }
+
 
 // -----------------------------------------------------------------------------------------------------------------------------
 void ISocketSubsystem::DestroySocket(FSocket* Socket)

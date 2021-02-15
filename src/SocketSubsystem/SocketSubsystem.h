@@ -2,9 +2,11 @@
 
 #include "Types.h"
 
+#include "Socket.h"
+
+#define PLATFORM_SOCKETSUBSYSTEM 1
 
 class FInternetAddr;
-class FSocket;
 
 class ISocketSubsystem
 {
@@ -12,6 +14,11 @@ private:
     ISocketSubsystem() {}
 
 public:
+    static ISocketSubsystem *Get(int ue4CompatibilityInt)
+    {
+        return ISocketSubsystem::Get();
+    }
+
 	static ISocketSubsystem* Get()
 	{
 		static ISocketSubsystem instance;
@@ -46,13 +53,13 @@ public:
 	/**
 	 * Creates a socket
 	 *
-	 * @Param SocketType type of socket to create (DGram, Stream, etc)
-	 * @param SocketDescription debug description
-	 * @param bForceUDP overrides any platform specific protocol with UDP instead
+	 * @Param ue4CompatName - SocketType type of socket to create (DGram, Stream, etc)
+	 * @param ue4CompatString - SocketDescription debug description
+	 * @param ue4CompatType - select between IPv4 or IPv6
 	 *
 	 * @return the new socket or NULL if failed
 	 */
-	virtual FSocket* CreateSocket(ESocketType SocketType);
+    virtual FSocket *CreateSocket(int ue4CompatName, const char *ue4CompatString, FNetworkProtocolTypes ue4CompatType);
 
 	/**
 	 * Cleans up a socket class

@@ -1,5 +1,17 @@
 #pragma once
 
+#if _WIN32
+#    include <WinSock2.h>
+#    include <ws2ipdef.h>
+#    include <ws2tcpip.h>
+#else
+#    include <fcntl.h>
+#    include <netinet/in.h>
+#    include <netinet/udp.h>
+#    include <sys/socket.h>
+#    include <unistd.h>
+#endif
+
 #include <cstdint>
 #include <vector>
 #include <memory>
@@ -14,6 +26,7 @@ typedef uint64_t uint64;
 typedef int64_t int64;
 typedef char TCHAR;
 
+#define FString std::string
 #define TArray std::vector
 #define TSharedRef std::shared_ptr
 
