@@ -223,7 +223,7 @@ static void recv_handler(struct mbuf *mb, void *arg)
         for (int i = 0; i < msgLen / 6; i++) {
             struct sa peerCandidate;
             sa_init(&peerCandidate, AF_INET);
-            peerCandidate.u.in.sin_addr.S_un.S_addr = mbuf_read_u32(mb);
+            peerCandidate.u.in.sin_addr.s_addr = mbuf_read_u32(mb);
             peerCandidate.u.in.sin_port = mbuf_read_u16(mb);
 
             re_printf("RECV %J -- received candidate: %J\n", &signalPeer->reSA, &peerCandidate);
