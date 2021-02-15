@@ -183,7 +183,7 @@ static void recv_handler(struct mbuf *mb, void *arg)
         } else if (msgID == MessageID::PeerCandidates) {
             for (int i = 0; i < msgLen / 6; i++) {
                 sa_init(&peerCandidate, AF_INET);
-                peerCandidate.u.in.sin_addr.S_un.S_addr = mbuf_read_u32(mb);
+                peerCandidate.u.in.sin_addr.s_addr = mbuf_read_u32(mb);
                 peerCandidate.u.in.sin_port = mbuf_read_u16(mb);
 
                 re_printf("%zu - recv_handler: candidate: %J\n", client->id, &peerCandidate);
@@ -224,7 +224,7 @@ void launch_timer_handler(void *arg)
     (void)arg;
     int err;
     char strnumber[40] = {0};
-    itoa(CLIENT_COUNT + launchIndex, strnumber, 10);
+    snprintf(strnumber, 40, "potato_%d", CLIENT_COUNT + launchIndex + 2);
 
     re_printf("launching: %d and %d\n", launchIndex, launchIndex + 1);
 
