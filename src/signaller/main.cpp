@@ -322,7 +322,7 @@ int main(void)
         goto out;
     }
 
-    (void)sa_set_str(&laddr, "0.0.0.0", 3456);
+    (void)sa_set_str(&laddr, "0.0.0.0", 5080);
 
     /* Create listening TCP socket, IP address 0.0.0.0, TCP port 3456 */
     err = tcp_listen(&ts, &laddr, connect_handler, NULL);

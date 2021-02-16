@@ -1,5 +1,7 @@
 #include "InternetAddr.h"
 
+#include <cstring>
+
 // -----------------------------------------------------------------------------------------------------------------------------
 FInternetAddr::FInternetAddr()
 {
@@ -10,7 +12,7 @@ FInternetAddr::FInternetAddr()
 // -----------------------------------------------------------------------------------------------------------------------------
 void FInternetAddr::SetIp(uint32 InAddr)
 {
-    m_sockaddr.sin_addr.S_un.S_addr = htonl(InAddr);
+    m_sockaddr.sin_addr.s_addr = htonl(InAddr);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------
@@ -19,7 +21,7 @@ void FInternetAddr::SetIp(const char* InAddr, bool& bIsValid)
     int err;
     bIsValid = false;
 
-    err = inet_pton(AF_INET, InAddr, &m_sockaddr.sin_addr.S_un.S_addr);
+    err = inet_pton(AF_INET, InAddr, &m_sockaddr.sin_addr.s_addr);
     if (err) return;
 
     bIsValid = true;
@@ -28,7 +30,7 @@ void FInternetAddr::SetIp(const char* InAddr, bool& bIsValid)
 // -----------------------------------------------------------------------------------------------------------------------------
 void FInternetAddr::GetIp(uint32& OutAddr) const
 {
-    OutAddr = ntohl(m_sockaddr.sin_addr.S_un.S_addr);
+    OutAddr = ntohl(m_sockaddr.sin_addr.s_addr);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------
@@ -46,19 +48,19 @@ int32 FInternetAddr::GetPort() const
 // -----------------------------------------------------------------------------------------------------------------------------
 void FInternetAddr::SetAnyAddress()
 {
-    m_sockaddr.sin_addr.S_un.S_addr = INADDR_ANY;
+    m_sockaddr.sin_addr.s_addr = INADDR_ANY;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------
 void FInternetAddr::SetBroadcastAddress()
 {
-    m_sockaddr.sin_addr.S_un.S_addr = INADDR_BROADCAST;
+    m_sockaddr.sin_addr.s_addr = INADDR_BROADCAST;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------
 void FInternetAddr::SetLoopbackAddress()
 {
-    m_sockaddr.sin_addr.S_un.S_addr = INADDR_LOOPBACK;
+    m_sockaddr.sin_addr.s_addr = INADDR_LOOPBACK;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------

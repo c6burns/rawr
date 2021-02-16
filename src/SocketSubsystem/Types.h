@@ -9,6 +9,7 @@
 #    include <netinet/in.h>
 #    include <netinet/udp.h>
 #    include <sys/socket.h>
+#    include <arpa/inet.h>
 #    include <unistd.h>
 #endif
 
