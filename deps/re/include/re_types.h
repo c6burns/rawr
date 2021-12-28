@@ -16,6 +16,10 @@
 
 #ifdef HAVE_INTTYPES_H
 #include <inttypes.h>
+
+#    ifdef _WIN32
+typedef long ssize_t;
+#    endif
 #else
 
 #ifndef __int8_t_defined

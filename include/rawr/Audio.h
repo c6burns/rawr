@@ -1,6 +1,12 @@
 #ifndef RAWR_AUDIO_H
 #define RAWR_AUDIO_H
 
+#include "rawr/Platform.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define RAWR_AUDIOSTREAM_SAMPLECOUNT_MAX
 #define RAWR_AUDIOSTREAM_LEVEL_MULTIPLIER 10000.0
 
@@ -54,29 +60,33 @@ typedef struct rawr_AudioDevice rawr_AudioDevice;
 
 typedef struct rawr_AudioStream rawr_AudioStream;
 
-int rawr_Audio_Setup(void);
-int rawr_Audio_Cleanup(void);
+RAWR_API int RAWR_CALL rawr_Audio_Setup(void);
+RAWR_API int RAWR_CALL rawr_Audio_Cleanup(void);
 
-rawr_AudioDevice *rawr_AudioDevice_Get(rawr_AudioDeviceId id);
-rawr_AudioDevice *rawr_AudioDevice_DefaultInput(void);
-rawr_AudioDevice *rawr_AudioDevice_DefaultOutput(void);
+RAWR_API rawr_AudioDevice * RAWR_CALL rawr_AudioDevice_Get(rawr_AudioDeviceId id);
+RAWR_API rawr_AudioDevice * RAWR_CALL rawr_AudioDevice_DefaultInput(void);
+RAWR_API rawr_AudioDevice * RAWR_CALL rawr_AudioDevice_DefaultOutput(void);
 
-rawr_AudioDeviceId rawr_AudioDevice_Id(rawr_AudioDevice *dev);
-const char *rawr_AudioDevice_Name(rawr_AudioDevice *dev);
-rawr_AudioDeviceProps rawr_AudioDevice_Props(rawr_AudioDevice *dev);
-rawr_AudioRateFlags rawr_AudioDevice_SampleRates(rawr_AudioDevice *dev);
-int rawr_AudioDevice_OutputChannels(rawr_AudioDevice *dev);
-int rawr_AudioDevice_InputChannels(rawr_AudioDevice *dev);
+RAWR_API rawr_AudioDeviceId RAWR_CALL rawr_AudioDevice_Id(rawr_AudioDevice *dev);
+RAWR_API const char * RAWR_CALL rawr_AudioDevice_Name(rawr_AudioDevice *dev);
+RAWR_API rawr_AudioDeviceProps RAWR_CALL rawr_AudioDevice_Props(rawr_AudioDevice *dev);
+RAWR_API rawr_AudioRateFlags RAWR_CALL rawr_AudioDevice_SampleRates(rawr_AudioDevice *dev);
+RAWR_API int RAWR_CALL rawr_AudioDevice_OutputChannels(rawr_AudioDevice *dev);
+RAWR_API int RAWR_CALL rawr_AudioDevice_InputChannels(rawr_AudioDevice *dev);
 
-int rawr_AudioStream_Setup(rawr_AudioStream **out_stream, rawr_AudioRate sampleRate, int channelCount, int sampleCount);
-void rawr_AudioStream_Cleanup(rawr_AudioStream *stream);
-int rawr_AudioStream_AddDevice(rawr_AudioStream *stream, rawr_AudioDevice *dev);
-int rawr_AudioStream_Start(rawr_AudioStream *stream);
-int rawr_AudioStream_Stop(rawr_AudioStream *stream);
-int rawr_AudioStream_Read(rawr_AudioStream *stream, void *buffer);
-int rawr_AudioStream_Write(rawr_AudioStream *stream, void *buffer);
+RAWR_API int RAWR_CALL rawr_AudioStream_Setup(rawr_AudioStream **out_stream, rawr_AudioRate sampleRate, int channelCount, int sampleCount);
+RAWR_API void RAWR_CALL rawr_AudioStream_Cleanup(rawr_AudioStream *stream);
+RAWR_API int RAWR_CALL rawr_AudioStream_AddDevice(rawr_AudioStream *stream, rawr_AudioDevice *dev);
+RAWR_API int RAWR_CALL rawr_AudioStream_Start(rawr_AudioStream *stream);
+RAWR_API int RAWR_CALL rawr_AudioStream_Stop(rawr_AudioStream *stream);
+RAWR_API int RAWR_CALL rawr_AudioStream_Read(rawr_AudioStream *stream, void *buffer);
+RAWR_API int RAWR_CALL rawr_AudioStream_Write(rawr_AudioStream *stream, void *buffer);
 
-double rawr_AudioStream_InputLevel(rawr_AudioStream *stream);
-double rawr_AudioStream_OutputLevel(rawr_AudioStream *stream);
+RAWR_API double RAWR_CALL rawr_AudioStream_InputLevel(rawr_AudioStream *stream);
+RAWR_API double RAWR_CALL rawr_AudioStream_OutputLevel(rawr_AudioStream *stream);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

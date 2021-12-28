@@ -35,14 +35,6 @@ int rawr_Endpoint_SetSockAddr(rawr_Endpoint *endpoint, void *sockaddr_void)
     int rv = rawr_Error;
     struct sockaddr_storage *sockaddr = sockaddr_void;
 
-    memset(endpoint, 0, sizeof(*endpoint));
-    if (sockaddr->ss_family == AF_INET6) {
-        memcpy(endpoint, (struct sockaddr_in6 *)sockaddr, sizeof(struct sockaddr_in6));
-    } else if (sockaddr->ss_family == AF_INET) {
-        memcpy(endpoint, (struct sockaddr_in *)sockaddr, sizeof(struct sockaddr_in));
-    } else {
-        return rawr_Error;
-    }
     if (sockaddr->ss_family == AF_INET) {
         memcpy(&endpoint->addr4, sockaddr, sizeof(endpoint->addr4));
         rv = rawr_Success;

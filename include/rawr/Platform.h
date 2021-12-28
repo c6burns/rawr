@@ -106,7 +106,7 @@
 
 #define RAWR_INLINE_IMPL static inline
 
-#if RAWR_C_MSC
+#if defined(RAWR_C_MSC) && !defined(RAWR_STATIC)
 #    if defined(RAWR_C_MISSING_STDBOOL) || defined(RAWR_C_MISSING_STDINT)
 #        error "Please file an issue if you are truly missing stdint or stdbool in any MSFT environment: https://github.com/c6burns/socklynx/issues"
 #    endif

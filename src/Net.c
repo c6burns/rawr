@@ -5,6 +5,7 @@
 
 int rawr_Net_Setup()
 {
+    rand_init();
     return libre_init();
 }
 

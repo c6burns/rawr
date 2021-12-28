@@ -2,13 +2,17 @@
 #define RAWR_OPUS_H
 
 #include "rawr/Audio.h"
+#include "rawr/Platform.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define RAWR_CODEC_OUTPUT_BYTES_MAX 1500
 #define RAWR_CODEC_OUTPUT_SAMPLES_MAX (RAWR_CODEC_OUTPUT_BYTES_MAX / sizeof(rawr_AudioSample))
 
 #define RAWR_CODEC_INPUT_SAMPLES_MAX 5760
 #define RAWR_CODEC_INPUT_BYTES_MAX (RAWR_CODEC_INPUT_SAMPLES_MAX * sizeof(rawr_AudioSample))
-
 
 typedef struct rawr_Codec rawr_Codec;
 
@@ -51,13 +55,17 @@ typedef struct rawr_CodecConfig {
     int dtx;
 } rawr_CodecConfig;
 
-int rawr_Codec_Setup(rawr_Codec **out_codec, rawr_CodecType type, rawr_CodecRate rate, rawr_CodecTiming time);
-void rawr_Codec_Cleanup(rawr_Codec *codec);
+RAWR_API int RAWR_CALL rawr_Codec_Setup(rawr_Codec **out_codec, rawr_CodecType type, rawr_CodecRate rate, rawr_CodecTiming time);
+RAWR_API void RAWR_CALL rawr_Codec_Cleanup(rawr_Codec *codec);
 
-int rawr_Codec_Encode(rawr_Codec *codec, void *inBuffer, void *outBuffer);
-int rawr_Codec_Decode(rawr_Codec *codec, void *inBuffer, int byteLen, void *outBuffer);
+RAWR_API int RAWR_CALL rawr_Codec_Encode(rawr_Codec *codec, void *inBuffer, void *outBuffer);
+RAWR_API int RAWR_CALL rawr_Codec_Decode(rawr_Codec *codec, void *inBuffer, int byteLen, void *outBuffer);
 
-int rawr_Codec_FrameSize(rawr_CodecRate sampleRate, rawr_CodecTiming timing);
-int rawr_Codec_FrameSizeCode(rawr_CodecRate sampleRate, int sampleCount);
+RAWR_API int RAWR_CALL rawr_Codec_FrameSize(rawr_CodecRate sampleRate, rawr_CodecTiming timing);
+RAWR_API int RAWR_CALL rawr_Codec_FrameSizeCode(rawr_CodecRate sampleRate, int sampleCount);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -20,7 +20,7 @@ typedef void (udp_recv_h)(const struct sa *src, struct mbuf *mb, void *arg);
 typedef void (udp_error_h)(int err, void *arg);
 
 
-int  udp_listen(struct udp_sock **usp, const struct sa *local,
+int  udp_listen(struct udp_sock **usp, struct sa *local,
 		udp_recv_h *rh, void *arg);
 int  udp_connect(struct udp_sock *us, const struct sa *peer);
 int  udp_send(struct udp_sock *us, const struct sa *dst, struct mbuf *mb);

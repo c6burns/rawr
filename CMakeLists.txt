@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(rawr LANGUAGES C)
+project(rawr LANGUAGES C CXX)
 include(ExternalProject)
 enable_testing()
 
@@ -198,7 +198,7 @@ endif()
 #
 # dynamic shared object
 
-add_library(rawrDSO MODULE src/dso/dso.c)
+add_library(rawrDSO MODULE ${RAWR_SRC})
 target_compile_definitions(rawrDSO PRIVATE RAWR_EXPORTS)
 target_link_libraries(rawrDSO ${RAWR_LINK_LIBS})
 target_include_directories(rawrDSO PRIVATE ${RAWR_INCLUDE_DIRS})
@@ -210,16 +210,27 @@ macro(rawr_add_library rname)
     add_library(${rname} ${ARGN})
     target_link_libraries(${rname} ${RAWR_LINK_LIBS})
     target_include_directories(${rname} PRIVATE ${RAWR_INCLUDE_DIRS})
+    target_compile_definitions(${rname} PRIVATE RAWR_STATIC)
 endmacro()
 
 rawr_add_library(rawr ${RAWR_SRC})
+
+add_library(SocketSubsystem
+    src/SocketSubsystem/InternetAddr.h
+    src/SocketSubsystem/InternetAddr.cpp
+    src/SocketSubsystem/Socket.h
+    src/SocketSubsystem/Socket.cpp
+    src/SocketSubsystem/SocketSubsystem.h
+    src/SocketSubsystem/SocketSubsystem.cpp
+    src/SocketSubsystem/Types.h
+)
 
 #
 # executable
 
 macro(rawr_add_executable rname)
     add_executable(${rname} ${ARGN})
-    target_compile_definitions(${rname} PRIVATE ${RE_DEFINES})
+    target_compile_definitions(${rname} PRIVATE ${RE_DEFINES} RAWR_STATIC)
 	target_link_libraries(${rname} rawr ${RAWR_LINK_LIBS})
     target_include_directories(${rname} PRIVATE ${RAWR_INCLUDE_DIRS})
 endmacro()
@@ -291,6 +302,22 @@ if (TARGET re)
     rawr_add_executable(playground_ice src/playground/re/playground_ice.c)
     rawr_add_executable(playground_stun src/playground/re/playground_stun.c)
     rawr_add_executable(playground_dtls src/playground/re/playground_dtls.c)
+    rawr_add_executable(playground_tcp src/playground/re/playground_tcp.c)
+    rawr_add_executable(playground_udp src/playground/re/playground_udp.c)
+    rawr_add_executable(playground_ws src/playground/re/playground_ws.c)
+    rawr_add_executable(playground_signal src/playground/re/playground_signal.cpp)
+
+    rawr_add_executable(signaller
+        src/signaller/main.cpp
+        src/signaller/SignalChannel.h
+        src/signaller/SignalPeer.h
+        src/signaller/PeerManager.h
+        src/signaller/PeerManager.cpp
+    )
+
+    rawr_add_executable(signallerTestClient
+        src/signallerTestClient/main.cpp
+    )
 
     add_custom_command(TARGET playground_re_sip POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/cmake/client.pem $<TARGET_FILE_DIR:playground_re_sip>
