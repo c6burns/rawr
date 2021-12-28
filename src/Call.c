@@ -11,8 +11,19 @@
 
 #include "re.h"
 
+#define RAWR_CALL_USE_SRTP 1
 #define RAWR_CALL_SIPARG_MAX 255
 #define RAWR_CALL_UDP_OVERHEAD_BYTES 54
+
+#if RAWR_CALL_USE_SRTP
+#   define RAWR_CALL_MEDIA_PROTO "RTP/SAVP"
+#   define RAWR_CALL_SRTP_SUITE SRTP_AES_CM_128_HMAC_SHA1_80
+#   define RAWR_CALL_SRTP_KEY_LEN 16
+#   define RAWR_CALL_SRTP_SALT_LEN 14
+#   define RAWR_CALL_SRTP_TAG_LEN 10
+#else
+#   define RAWR_CALL_MEDIA_PROTO "RTP/AVP"
+#endif
 
 typedef struct rawr_Call {
     rawr_CallError error;
@@ -56,8 +67,52 @@ typedef struct rawr_Call {
 
     rawr_AudioSample inputSamples[RAWR_CODEC_OUTPUT_SAMPLES_MAX];
     rawr_AudioSample outputSamples[RAWR_CODEC_INPUT_SAMPLES_MAX];
+
+#if RAWR_CALL_USE_SRTP
+    enum srtp_suite srtpSuite;
+    struct srtp *srtpTransmitContext;
+    struct srtp *srtpReceiveContext;
+#endif
 } rawr_Call;
 
+static size_t get_keylen(enum srtp_suite suite)
+{
+    switch (suite) {
+    case SRTP_AES_CM_128_HMAC_SHA1_32: return 16;
+    case SRTP_AES_CM_128_HMAC_SHA1_80: return 16;
+    case SRTP_AES_256_CM_HMAC_SHA1_32: return 32;
+    case SRTP_AES_256_CM_HMAC_SHA1_80: return 32;
+    case SRTP_AES_128_GCM:             return 16;
+    case SRTP_AES_256_GCM:             return 32;
+    default: return 0;
+    }
+}
+
+static size_t get_saltlen(enum srtp_suite suite)
+{
+    switch (suite) {
+    case SRTP_AES_CM_128_HMAC_SHA1_32: return 14;
+    case SRTP_AES_CM_128_HMAC_SHA1_80: return 14;
+    case SRTP_AES_256_CM_HMAC_SHA1_32: return 14;
+    case SRTP_AES_256_CM_HMAC_SHA1_80: return 14;
+    case SRTP_AES_128_GCM:             return 12;
+    case SRTP_AES_256_GCM:             return 12;
+    default: return 0;
+    }
+}
+
+static size_t get_taglen(enum srtp_suite suite)
+{
+    switch (suite) {
+    case SRTP_AES_CM_128_HMAC_SHA1_32: return 4;
+    case SRTP_AES_CM_128_HMAC_SHA1_80: return 10;
+    case SRTP_AES_256_CM_HMAC_SHA1_32: return 4;
+    case SRTP_AES_256_CM_HMAC_SHA1_80: return 10;
+    case SRTP_AES_128_GCM:             return 16;
+    case SRTP_AES_256_GCM:             return 16;
+    default: return 0;
+    }
+}
 
 static void rawr_Call_Terminate(rawr_Call *call);
 void rawr_Call_SetState(rawr_Call *call, rawr_CallState callState);
@@ -95,6 +150,7 @@ void rawr_Call_Reset(rawr_Call *call)
 // private thread -----------------------------------------------------------------------------------------------
 void rawr_Call_RtpSendThread(void *arg)
 {
+    int err = 0;
     struct mbuf *re_mb;
     int len, sampleCount;
     char marker;
@@ -131,7 +187,7 @@ void rawr_Call_RtpSendThread(void *arg)
         if (call->rtpTime == frame_size) marker = 1;
 
         mbuf_rewind(re_mb);
-        
+
         hdr.ver = RTP_VERSION;
         hdr.pad = false;
         hdr.ext = 0;
@@ -157,6 +213,10 @@ void rawr_Call_RtpSendThread(void *arg)
 
         call->rtpBytesSend += len;
         call->rtpBytesSend += RAWR_CALL_UDP_OVERHEAD_BYTES;
+
+#if RAWR_CALL_USE_SRTP
+        RAWR_GUARD_CLEANUP(srtp_encrypt(call->srtpTransmitContext, re_mb));
+#endif
 
         RAWR_GUARD_CLEANUP(udp_send(call->reRtpSock, sdp_media_raddr(call->reSdpMedia), re_mb) < 0);
 
@@ -223,6 +283,11 @@ static void rawr_Call_OnRtp(const struct sa *src, const struct rtp_header *hdr, 
         call->rtpBytesRecv = 0;
     }
 
+#if RAWR_CALL_USE_SRTP
+    mb->pos = 0;
+    RAWR_GUARD_CLEANUP(srtp_decrypt(call->srtpReceiveContext, mb));
+    mb->pos = 12;
+#endif
     RAWR_GUARD_CLEANUP(rawr_Codec_Decode(call->decoder, mbuf_buf(mb), mbuf_get_left(mb), &call->outputSamples) < 0);
 
     int sampleCount = 0;
@@ -273,15 +338,64 @@ static void rawr_Call_UpdateMedia(void *arg)
 
     const struct sa *raddr = sdp_media_raddr(call->reSdpMedia);
     inet_ntop(sa_af(raddr), &raddr->u.in.sin_addr, re_remote_ip, raddr->len);
-    mn_log_info("SDP peer address: %s:%u", re_remote_ip, sa_port(raddr));
+    mn_log_debug("SDP peer address: %s:%u", re_remote_ip, sa_port(raddr));
 
     fmt = sdp_media_rformat(call->reSdpMedia, "opus");
     if (!fmt) {
-        mn_log_info("no common media format found");
+        mn_log_error("no common media format found");
         return;
     }
 
-    mn_log_info("SDP media format: %s/%u/%u (payload type: %u)", fmt->name, fmt->srate, fmt->ch, fmt->pt);
+    mn_log_debug("SDP media format: %s/%u/%u (payload type: %u)", fmt->name, fmt->srate, fmt->ch, fmt->pt);
+
+#if RAWR_CALL_USE_SRTP
+    const char *sdp_crypto_line = sdp_media_rattr(call->reSdpMedia, "crypto");
+    if (sdp_crypto_line) {
+        mn_log_debug("SDP crypto: %s", sdp_crypto_line);
+
+        const char delim[] = " ";
+        char *crypto_line = strdup(sdp_crypto_line);
+        char *token = strtok(crypto_line, delim);
+        int i = 0;
+        const int i_tag = 0, i_suite = 1, i_key = 2;
+        while (token != NULL) {
+            if (i == i_tag) {
+                /* tag */
+            } else if (i == i_suite) {
+                /* suite */
+                const char *suite_name = srtp_suite_name(call->srtpSuite);
+                if (strcmp(token, suite_name)) {
+                    mn_log_error("Cipher suite mismatch: %s vs %s", token, suite_name);
+                }
+            } else if (i == i_key) {
+                /* key */
+                char *inline_key = strchr(token, ':');
+                if (inline_key) {
+                    inline_key++;
+                    mn_log_debug("SDP remote crypto key: %s", inline_key);
+
+                    int err = 0;
+                    uint8_t rx_key[RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN];
+                    size_t rx_key_len = RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN;
+                    err = base64_decode(inline_key, strlen(inline_key), rx_key, &rx_key_len);
+                    if (err) {
+                        mn_log_error("SDP could not b64 decode crypto key");
+                    }
+
+                    err = srtp_alloc(&call->srtpReceiveContext, call->srtpSuite, rx_key, RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN, 0);
+                    if (err) {
+                        mn_log_error("SDP could not initialize crypto rx context");
+                    }
+                } else {
+                    mn_log_error("SDP could not parse remote key");
+                }
+            }
+
+            i++;
+            token = strtok(NULL, delim);
+        }
+    }
+#endif
 }
 
 /*
@@ -625,14 +739,14 @@ void rawr_Call_SipThread(void *arg)
 
     /* add supported SIP transports */
     struct tls *sip_tls = NULL;
-    //err = tls_alloc(&sip_tls, TLS_METHOD_SSLV23, "client.pem", "");
-    //if (err) {
-    //    re_fprintf(stderr, "tls_alloc error: %s\n", strerror(err));
-    //    goto cleanup;
-    //}
+    err = tls_alloc(&sip_tls, TLS_METHOD_SSLV23, "client.pem", "");
+    if (err) {
+        re_fprintf(stderr, "tls_alloc error: %s\n", strerror(err));
+        goto cleanup;
+    }
 
-    //err = sip_transp_add(call->reSip, SIP_TRANSP_TLS, &localSipSA, sip_tls);
-    err = sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localSipSA);
+    err = sip_transp_add(call->reSip, SIP_TRANSP_TLS, &localSipSA, sip_tls);
+    //err = sip_transp_add(call->reSip, SIP_TRANSP_UDP, &localSipSA);
     if (err) {
         mn_log_error("transport error: %s", strerror(err));
         goto cleanup;
@@ -646,9 +760,7 @@ void rawr_Call_SipThread(void *arg)
     }
 
     /* create the RTP/RTCP socket */
-    time_t t;
-    srand((unsigned)time(&t));
-    uint16_t localRtpPort = (rand() % 16383) + 16384;
+    const uint16_t localRtpPort = (rand_u16() % 16383) + 16384;
     net_default_source_addr_get(AF_INET, &localRtpSA);
     sa_set_port(&localRtpSA, localRtpPort);
 
@@ -669,11 +781,31 @@ void rawr_Call_SipThread(void *arg)
     }
 
     /* add audio sdp media, using port from RTP socket */
-    err = sdp_media_add(&call->reSdpMedia, call->reSdpSess, "audio", localRtpPort, "RTP/AVP");
+    err = sdp_media_add(&call->reSdpMedia, call->reSdpSess, "audio", localRtpPort, RAWR_CALL_MEDIA_PROTO);
     if (err) {
         mn_log_error("sdp media error: %s", strerror(err));
         goto cleanup;
     }
+
+#if RAWR_CALL_USE_SRTP
+    /* set up transmit key for SRTP */
+    uint8_t tx_key[RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN];
+    rand_bytes(tx_key, RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN);
+    size_t tx_key_strlen = 255;
+    char tx_key_str[256] = "";
+    base64_encode(tx_key, RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN, tx_key_str, &tx_key_strlen);
+
+    mn_log_debug("Generated SRTP transmit key: %s", tx_key_str);
+    err = srtp_alloc(&call->srtpTransmitContext, call->srtpSuite, tx_key, RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN, 0);
+    if (err) {
+        mn_log_error("SDP could not initialize crypto tx context");
+    }
+
+    char sdp_crypto_buf[4096];
+    snprintf(sdp_crypto_buf, 4095, "1 %s inline:%s", srtp_suite_name(call->srtpSuite), tx_key_str);
+    err =  sdp_media_set_lattr(call->reSdpMedia, true, "crypto", sdp_crypto_buf);
+    err |= sdp_media_set_lattr(call->reSdpMedia, true, "encryption", "required");
+#endif
 
     /* add opus sdp media format */
     err = sdp_format_add(NULL, call->reSdpMedia, false, "116", "opus", 48000, 2, NULL, NULL, NULL, false, NULL);
@@ -713,7 +845,7 @@ void rawr_Call_SipThread(void *arg)
         call,
         NULL
     );
-    
+
     /*
     err = sipreg_register(
         &call->reSipReg,
@@ -787,6 +919,8 @@ int rawr_Call_Setup(rawr_Call **out_call, const char *sipRegistrar, const char *
     snprintf((*out_call)->sipRegistrar, RAWR_CALL_SIPARG_MAX, "%s", sipRegistrar);
     snprintf((*out_call)->sipUsername, RAWR_CALL_SIPARG_MAX, "%s", sipUsername);
     snprintf((*out_call)->sipPassword, RAWR_CALL_SIPARG_MAX, "%s", sipPassword);
+
+    (*out_call)->srtpSuite = RAWR_CALL_SRTP_SUITE;
 
     RAWR_GUARD(mn_thread_setup(&(*out_call)->sipThread));
 
