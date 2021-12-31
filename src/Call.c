@@ -953,7 +953,7 @@ int rawr_Call_Stop(rawr_Call *call)
 {
     RAWR_ASSERT(call);
 
-    rawr_Call_SetExiting(call);
+    rawr_Call_Terminate(call);
 
     mn_thread_join(&call->sipThread);
 
