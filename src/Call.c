@@ -15,9 +15,10 @@
 #define RAWR_CALL_SIPARG_MAX 255
 #define RAWR_CALL_UDP_OVERHEAD_BYTES 54
 
+#define RAWR_CALL_SRTP_SUITE SRTP_AES_CM_128_HMAC_SHA1_80
+
 #if RAWR_CALL_USE_SRTP
 #   define RAWR_CALL_MEDIA_PROTO "RTP/SAVP"
-#   define RAWR_CALL_SRTP_SUITE SRTP_AES_CM_128_HMAC_SHA1_80
 #   define RAWR_CALL_SRTP_KEY_LEN 16
 #   define RAWR_CALL_SRTP_SALT_LEN 14
 #   define RAWR_CALL_SRTP_TAG_LEN 10
@@ -68,11 +69,9 @@ typedef struct rawr_Call {
     rawr_AudioSample inputSamples[RAWR_CODEC_OUTPUT_SAMPLES_MAX];
     rawr_AudioSample outputSamples[RAWR_CODEC_INPUT_SAMPLES_MAX];
 
-#if RAWR_CALL_USE_SRTP
     enum srtp_suite srtpSuite;
     struct srtp *srtpTransmitContext;
     struct srtp *srtpReceiveContext;
-#endif
 } rawr_Call;
 
 static size_t get_keylen(enum srtp_suite suite)
