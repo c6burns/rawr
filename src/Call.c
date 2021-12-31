@@ -327,6 +327,65 @@ static int rawr_Call_OnAuth(char **user, char **pass, const char *realm, void *a
     return err;
 }
 
+// private handler ----------------------------------------------------------------------------------------------
+static bool rawr_Call_CryptoAttribHandler(const char *name, const char *value, void *arg)
+{
+    rawr_Call *call = (rawr_Call *)arg;
+
+    if (value && !call->srtpReceiveContext) {
+        mn_log_debug("SDP crypto: %s", value);
+
+        const char delim[] = " ";
+        char *crypto_line = strdup(value);
+        char *token = strtok(crypto_line, delim);
+        int i = 0;
+        const int i_tag = 0, i_suite = 1, i_key = 2;
+        while (token != NULL) {
+            if (i == i_tag) {
+                /* tag */
+            } else if (i == i_suite) {
+                /* suite */
+                const char *suite_name = srtp_suite_name(call->srtpSuite);
+                if (strcmp(token, suite_name)) {
+                    mn_log_error("Cipher suite mismatch: %s vs %s", token, suite_name);
+                    return false;
+                }
+            } else if (i == i_key) {
+                /* key */
+                char *inline_key = strchr(token, ':');
+                if (inline_key) {
+                    inline_key++;
+                    mn_log_debug("SDP remote crypto key: %s", inline_key);
+
+                    int err = 0;
+                    uint8_t rx_key[RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN];
+                    size_t rx_key_len = RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN;
+                    err = base64_decode(inline_key, strlen(inline_key), rx_key, &rx_key_len);
+                    if (err) {
+                        mn_log_error("SDP could not b64 decode crypto key");
+                        return false;
+                    }
+
+                    err = srtp_alloc(&call->srtpReceiveContext, call->srtpSuite, rx_key, RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN, 0);
+                    if (err) {
+                        mn_log_error("SDP could not initialize crypto rx context");
+                        return false;
+                    }
+
+                    return true;
+                } else {
+                    mn_log_error("SDP could not parse remote key");
+                    return false;
+                }
+            }
+
+            i++;
+            token = strtok(NULL, delim);
+        }
+    }
+    return false;
+}
+
 /* print SDP status */
 // private handler ----------------------------------------------------------------------------------------------
 static void rawr_Call_UpdateMedia(void *arg)
@@ -348,51 +407,9 @@ static void rawr_Call_UpdateMedia(void *arg)
     mn_log_debug("SDP media format: %s/%u/%u (payload type: %u)", fmt->name, fmt->srate, fmt->ch, fmt->pt);
 
 #if RAWR_CALL_USE_SRTP
-    const char *sdp_crypto_line = sdp_media_rattr(call->reSdpMedia, "crypto");
-    if (sdp_crypto_line) {
-        mn_log_debug("SDP crypto: %s", sdp_crypto_line);
-
-        const char delim[] = " ";
-        char *crypto_line = strdup(sdp_crypto_line);
-        char *token = strtok(crypto_line, delim);
-        int i = 0;
-        const int i_tag = 0, i_suite = 1, i_key = 2;
-        while (token != NULL) {
-            if (i == i_tag) {
-                /* tag */
-            } else if (i == i_suite) {
-                /* suite */
-                const char *suite_name = srtp_suite_name(call->srtpSuite);
-                if (strcmp(token, suite_name)) {
-                    mn_log_error("Cipher suite mismatch: %s vs %s", token, suite_name);
-                }
-            } else if (i == i_key) {
-                /* key */
-                char *inline_key = strchr(token, ':');
-                if (inline_key) {
-                    inline_key++;
-                    mn_log_debug("SDP remote crypto key: %s", inline_key);
-
-                    int err = 0;
-                    uint8_t rx_key[RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN];
-                    size_t rx_key_len = RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN;
-                    err = base64_decode(inline_key, strlen(inline_key), rx_key, &rx_key_len);
-                    if (err) {
-                        mn_log_error("SDP could not b64 decode crypto key");
-                    }
-
-                    err = srtp_alloc(&call->srtpReceiveContext, call->srtpSuite, rx_key, RAWR_CALL_SRTP_KEY_LEN + RAWR_CALL_SRTP_SALT_LEN, 0);
-                    if (err) {
-                        mn_log_error("SDP could not initialize crypto rx context");
-                    }
-                } else {
-                    mn_log_error("SDP could not parse remote key");
-                }
-            }
-
-            i++;
-            token = strtok(NULL, delim);
-        }
+    /* if we have crypto lines in SDP and no receiving context, we need to parse the correct key */
+    if (!call->srtpReceiveContext) {
+        sdp_media_rattr_apply(call->reSdpMedia, "crypto", rawr_Call_CryptoAttribHandler, call);
     }
 #endif
 }
@@ -571,17 +588,17 @@ cleanup:
 
 /* called when register responses are received */
 // private handler ----------------------------------------------------------------------------------------------
-//static void rawr_Call_OnRegister(int err, const struct sip_msg *msg, void *arg)
-//{
-//    (void)arg;
-//
-//    mn_log_warning("called");
-//
-//    if (err)
-//        mn_log_info("register error: %s", strerror(err));
-//    else
-//        mn_log_info("register reply: %u", msg->scode);
-//}
+static void rawr_Call_OnRegister(int err, const struct sip_msg *msg, void *arg)
+{
+    (void)arg;
+
+    mn_log_warning("called");
+
+    if (err)
+        mn_log_info("register error: %s", strerror(err));
+    else
+        mn_log_info("register reply: %u", msg->scode);
+}
 
 /* called when all sip transactions are completed */
 // private handler ----------------------------------------------------------------------------------------------
@@ -851,7 +868,7 @@ void rawr_Call_SipThread(void *arg)
         call->reSip,
         call->sipRegistrar,
         call->sipURI,
-        NULL,
+        call->sipName,
         call->sipURI,
         60,
         call->sipName,
